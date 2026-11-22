@@ -60,19 +60,19 @@ def ensure_dirs() -> None:
 def load_settings() -> dict:
     s = dict(DEFAULT_SETTINGS)
     if SETTINGS.exists():
-        s.update(json.loads(SETTINGS.read_text() or "{}"))
+        s.update(json.loads(SETTINGS.read_text(encoding="utf-8") or "{}"))
     return s
 
 
 def save_settings(s: dict) -> None:
     ensure_dirs()
-    SETTINGS.write_text(json.dumps(s, indent=2))
+    SETTINGS.write_text(json.dumps(s, indent=2), encoding="utf-8")
 
 
 def load_secrets() -> dict:
     vals = {}
     if SECRETS.exists():
-        for line in SECRETS.read_text().splitlines():
+        for line in SECRETS.read_text(encoding="utf-8").splitlines():
             if "=" in line and not line.lstrip().startswith("#"):
                 k, v = line.split("=", 1)
                 vals[k.strip()] = v.strip().strip('"').strip("'")
@@ -85,7 +85,7 @@ def save_secrets(updates: dict) -> None:
     vals = load_secrets()
     vals.update({k: v.strip() for k, v in updates.items() if v and v.strip()})
     body = "".join(f"{k}='{v}'\n" for k, v in vals.items())
-    SECRETS.write_text(body)
+    SECRETS.write_text(body, encoding="utf-8", newline="\n")      # sourced by bash: LF only, even on Windows
     os.chmod(SECRETS, stat.S_IRUSR | stat.S_IWUSR)
 
 

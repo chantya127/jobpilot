@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="head"><div><h1>Resumes</h1><p class="muted">The active resume is uploaded to every application.</p></div></div>
+<div class="head"><div><h1>Resumes</h1><p class="muted">The active resume is uploaded to every application</p></div></div>
 <div class="grid g2">
   <div class="card">
     <h2>Your files</h2>
     {% for f in files %}
-    <div class="check"><span class="tick {{ 'ok' if f.active }}">{{ '★' if f.active else '·' }}</span>
+    <div class="check"><span class="tick {{ 'ok' if f.active }}">{% if f.active %}{{ icon('check', 14) }}{% endif %}</span>
       <div style="flex:1;min-width:0"><a href="/resumes/file/{{ f.name }}" target="_blank">{{ f.name }}</a>
         <span class="muted small">{{ f.size }} KB{{ ' · active' if f.active }}</span></div>
       {% if not f.active %}
@@ -13,7 +13,7 @@
       {% endif %}
       <form class="inline" method="post" action="/resumes/delete" onsubmit="return confirm('Delete {{ f.name }}?')"><input type="hidden" name="name" value="{{ f.name }}"><button class="btn sm danger">Delete</button></form>
     </div>
-    {% else %}<div class="empty">No resume yet.</div>{% endfor %}
+    {% else %}<div class="empty">No resume yet</div>{% endfor %}
   </div>
   <div class="card">
     <h2>Upload</h2>

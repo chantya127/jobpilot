@@ -118,11 +118,11 @@ def resolve_linkedin_redirect(href: str) -> str:
 
 
 def lines(path) -> set[str]:
-    return {l.strip() for l in path.read_text().splitlines() if l.strip()} if path.exists() else set()
+    return {l.strip() for l in path.read_text(encoding="utf-8").splitlines() if l.strip()} if path.exists() else set()
 
 
 def append(path, line):
-    with open(path, "a") as f:
+    with open(path, "a", encoding="utf-8") as f:
         f.write(line + "\n")
 
 
@@ -304,7 +304,7 @@ def main() -> None:
     browser.write_wrappers(max(1, int(s.get("workers", 2))))
     browser.launch(1)
     with sync_playwright() as p:
-        b = p.chromium.connect_over_cdp(f"http://localhost:{browser.port(1)}")
+        b = p.chromium.connect_over_cdp(f"http://127.0.0.1:{browser.port(1)}")
         ctx = b.contexts[0] if b.contexts else b.new_context()
         page = ctx.new_page()
         try:

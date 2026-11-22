@@ -3,13 +3,13 @@
 jobpilot.tools CLI; the conversation continues across messages (--resume)."""
 import datetime
 import json
-import os
 import subprocess
 import sys
 import threading
 
 from . import config, tools
 from .orchestrator import ISOLATION
+from .procs import child_env, exe, group_kwargs, posix
 
 # The prompt goes straight to the orchestrator Claude session (context kept by Claude via --resume).
 # This in-memory list exists only so the dashboard can display the conversation; nothing is written to disk.
@@ -66,14 +66,15 @@ def _run(text: str) -> None:
     try:
         s = config.load_settings()
         prompt = f"Current state:\n{tools.status()}\n\nUser: {text}"
-        cmd = ["claude", "-p", prompt, "--model", s.get("model") or "sonnet", "--output-format", "json",
+        cmd = [exe("claude"), "-p", "--model", s.get("model") or "sonnet", "--output-format", "json",
                "--tools", "Bash", "Read", "Grep", "--allowedTools", "Bash", "Read", "Grep",
-               "--append-system-prompt", SYSTEM.format(py=sys.executable, doc=tools.__doc__, home=config.HOME),
+               "--append-system-prompt", SYSTEM.format(py=posix(sys.executable), doc=tools.__doc__, home=posix(config.HOME)),
                *ISOLATION]
         if s.get("chat_session"):
             cmd += ["--resume", s["chat_session"]]
-        env = dict(os.environ, JP_HOME=str(config.HOME))
-        out = subprocess.run(cmd, cwd=config.HOME, env=env, capture_output=True, text=True, timeout=600)
+        env = child_env(JP_HOME=posix(config.HOME))
+        out = subprocess.run(cmd, input=prompt, cwd=config.HOME, env=env, capture_output=True, text=True,
+                             encoding="utf-8", errors="replace", timeout=600, **group_kwargs())
         try:
             data = json.loads(out.stdout)
         except ValueError:

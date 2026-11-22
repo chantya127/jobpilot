@@ -26,29 +26,116 @@ your own Claude Code login.
 | **Settings** | Auto-submit on/off, number of workers, browser, portal login, Gmail codes |
 
 ## Requirements
-| Need | Why |
-|---|---|
-| macOS or Linux (Windows: use WSL) | the browser helpers are bash scripts |
-| [uv](https://docs.astral.sh/uv/) (installs Python 3.10+ for you) | runs the dashboard |
-| Node.js 20+ | for agent-browser |
-| [agent-browser](https://www.npmjs.com/package/agent-browser) `npm i -g agent-browser` | lets the agents control the browser |
-| [Claude Code](https://docs.claude.com/en/docs/claude-code) `npm i -g @anthropic-ai/claude-code`, logged in | runs the agents (Pro/Max plan or API key) |
-| Chrome, Brave, Chromium or Edge | the worker windows |
-| Optional: Gmail with 2-Step Verification | lets agents read verification codes automatically |
+Works on **macOS, Linux and Windows 10/11** (native; no WSL needed).
 
-## Quick start
+| Need | Why | Check |
+|---|---|---|
+| [uv](https://docs.astral.sh/uv/) | installs Python 3.10+ and the dependencies, runs the dashboard | `uv --version` |
+| Node.js 20+ | runs agent-browser | `node -v` |
+| [agent-browser](https://www.npmjs.com/package/agent-browser) | lets the agents drive the browser | `agent-browser --version` |
+| [Claude Code](https://docs.claude.com/en/docs/claude-code), logged in | runs the agents (Pro/Max plan or API key) | `claude --version` |
+| Chrome, Brave, Chromium or Edge | the worker windows | — |
+| `curl` | the browser wrapper scripts use it (built into macOS, Windows 10+ and Git Bash) | `curl --version` |
+| **Windows only:** [Git for Windows](https://git-scm.com/download/win) | Claude Code runs the agents' shell commands in Git Bash | `git --version` |
+| Optional: Gmail with 2-Step Verification | lets agents read verification codes automatically | — |
+
+## Install
+
+### macOS
 ```bash
-git clone https://github.com/<you>/jobpilot && cd jobpilot
-uv sync
-uv run playwright install chromium   # only needed for Find jobs
-uv run jobpilot                      # opens http://127.0.0.1:8765
+# Homebrew (https://brew.sh) is the easiest route
+brew install uv node
+brew install --cask google-chrome          # skip if you already have Chrome, Brave, Chromium or Edge
+npm install -g agent-browser
+curl -fsSL https://claude.ai/install.sh | bash
+claude                                     # log in once, then exit with /exit
 ```
+
+### Linux (Debian/Ubuntu shown; use your package manager's equivalents elsewhere)
+```bash
+sudo apt update && sudo apt install -y curl git
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Node.js 20+ (distro packages are often too old). nvm needs no sudo:
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+source ~/.nvm/nvm.sh && nvm install 22
+npm install -g agent-browser
+curl -fsSL https://claude.ai/install.sh | bash
+claude                                     # log in once, then exit with /exit
+# A Chromium-family browser, e.g. Chromium:
+sudo apt install -y chromium || sudo snap install chromium
+```
+Fedora: `sudo dnf install -y curl git chromium`. Arch: `sudo pacman -S curl git chromium nodejs npm`.
+You need a desktop session: the worker windows are real browser windows.
+
+### Windows 10/11 (PowerShell)
+```powershell
+winget install --id Git.Git -e
+winget install --id astral-sh.uv -e
+winget install --id OpenJS.NodeJS.LTS -e
+winget install --id Google.Chrome -e       # skip if you already have Chrome, Brave or Edge (Edge is preinstalled)
+# Close and reopen PowerShell so the new PATH entries load, then:
+npm install -g agent-browser
+irm https://claude.ai/install.ps1 | iex
+claude                                     # log in once, then exit with /exit
+```
+Use the native Claude Code installer above rather than `npm i -g @anthropic-ai/claude-code`: it gives you
+`claude.exe`, which handles long prompts reliably. If Git is installed somewhere unusual, set
+`CLAUDE_CODE_GIT_BASH_PATH` to its `bin\bash.exe`.
+
+### Then, on every OS
+```bash
+git clone <repo-url> jobpilot
+cd jobpilot
+uv sync                    # creates .venv with Python 3.10+ and all dependencies
+uv run jobpilot --check    # verifies every requirement; prints the fix for anything missing
+uv run jobpilot            # starts the dashboard and opens http://127.0.0.1:8765
+```
+Add `--deep` to `--check` to also confirm the Claude Code login (uses a few tokens). Use `--port 9000` if 8765 is
+taken, and `--no-browser` to not open a tab automatically.
+
 Then follow the **Setup** page: upload your resume → **Draft from my resume** → check the fields → set preferences →
 paste a few links into **Queue** → **Start**.
 
 **Auto-submit is ON by default**: agents submit each application once every field is filled and checked. To review
 forms first, turn it off in **Settings**. Agents then stop before the final Submit, a review lock in the page stops
 any accidental submit, and each form waits in *Needs you* for you to check, unlock and submit.
+
+### Updating
+```bash
+git pull && uv sync
+```
+Your data lives outside the repo (see below), so updates never touch it.
+
+## Installing with an AI agent (Claude Code, etc.)
+If you're an agent asked to install JobPilot for a user, follow these steps in order and stop at the first failure.
+1. Detect the OS (`uname -s` on macOS/Linux; on Windows, PowerShell's `$env:OS` is `Windows_NT`).
+2. Install the requirements with the commands for that OS in **Install** above. Skip anything already present (use the
+   Check column of the Requirements table). Don't use `sudo npm`: on Linux use nvm, as shown. On Windows, open a new
+   shell after `winget` installs so PATH updates load.
+3. In the repo: `uv sync`, then `uv run jobpilot --check`. It exits 0 when everything is ready and 1 otherwise, and
+   prints a `fix:` line for each missing item. Apply the fixes and run it again until it exits 0.
+4. **Leave these to the user** (they need a person; don't attempt them, just tell the user):
+   - logging in to Claude Code (`claude` in a terminal, then `/exit`);
+   - logging in to LinkedIn and job portals in the worker browser (Settings → Open worker browser);
+   - creating a Gmail app password (optional, for email codes);
+   - entering personal details, the resume, and choosing auto-submit on/off.
+5. Start the dashboard with `uv run jobpilot` (keeps running; stop with Ctrl-C) and tell the user to open
+   http://127.0.0.1:8765 and follow the Setup page.
+
+Do not put personal data, resumes or secrets in the repo. Everything personal goes in the data directory.
+
+## Troubleshooting
+| Symptom | Fix |
+|---|---|
+| `uv: command not found` right after installing | Open a new terminal (PATH changed). Linux/macOS: `source ~/.local/bin/env` also works |
+| `claude` / `agent-browser` not found | Open a new terminal. Check `npm prefix -g` is on your PATH |
+| Setup shows *Chromium-based browser: none found* | Install one, or set its full path in **Settings → Browser** |
+| Port 8765 already in use | `uv run jobpilot --port 9000` |
+| Windows: agents fail with "bash not found" / Git Bash errors | Install Git for Windows, or set `CLAUDE_CODE_GIT_BASH_PATH` to `C:\Program Files\Git\bin\bash.exe` |
+| Windows: `$'\r': command not found` in a worker log | Your checkout has CRLF line endings. Run `git config core.autocrlf false`, then `git rm --cached -r . && git reset --hard` (the repo's `.gitattributes` forces LF) |
+| Linux: worker window doesn't appear | Run from a desktop session (X11/Wayland), not a bare SSH shell |
+| Agents can't open the worker browser | Close any other window using the same worker profile, then **Settings → Open worker browser** |
+| macOS: "Brave/Chrome is damaged" or a permissions prompt | Open the browser once by hand and approve it |
 
 ## How it works
 ```
@@ -61,9 +148,10 @@ Dashboard (FastAPI, 127.0.0.1 only)
   └─ SQLite tracker, live event log, Needs-you inbox
 ```
 - **Engine** (`engine/`): the worker prompt, `jobkit.sh` (bash helpers for Workday, Greenhouse, Hirist, uploads,
-  trusted clicks), and portal notes written up from hundreds of real applications.
-- **Your data** (`~/.jobpilot/`, or `$JOBPILOT_HOME`): `profile.json`, `profile.md`, `resumes/`, `settings.json`,
-  `secrets.env` (chmod 600), `jobpilot.db`, `browser-profiles/`, `logs/`. It is never inside the repo.
+  trusted clicks), and portal notes written up from hundreds of real applications. On Windows the agents run these in
+  Git Bash, which is why Git for Windows is required there.
+- **Your data** (`~/.jobpilot/`, on Windows `%USERPROFILE%\.jobpilot\`, or wherever `JOBPILOT_HOME` points): `profile.json`, `profile.md`, `resumes/`, `settings.json`,
+  `secrets.env` (owner-only on macOS/Linux), `jobpilot.db`, `browser-profiles/`, `logs/`. It is never inside the repo.
 - **Learning:** when an agent finds a new portal quirk, it reports `LEARNED:`, and the note is appended to
   `~/.jobpilot/portals-local.md`. Future runs read that file too. Please open a PR to share good ones in `engine/portals/`.
 

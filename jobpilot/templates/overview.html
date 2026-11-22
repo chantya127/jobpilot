@@ -1,47 +1,65 @@
 {% extends "base.html" %}
 {% block content %}
+{% set c = counts %}
+{% set n_queued = c.get('queued', 0) %}
+{% set n_running = c.get('running', 0) %}
+{% set n_need = c.get('ready-for-review', 0) + c.get('pending-user', 0) %}
+{% set n_applied = c.get('applied', 0) %}
+{% set n_total = c.values()|sum %}
+{% set n_off = n_total - n_queued - n_running - n_need - n_applied %}
 <div class="head">
-  <div><h1>Overview</h1><p class="muted">Your job search at a glance.</p></div>
+  <div><h1>Overview</h1>
+    <p class="muted">Agents {{ 'submit applications on their own' if settings.auto_submit else 'stop before Submit so you can review each form' }}</p></div>
   <div class="row">
-    <a class="btn" href="/queue">+ Add jobs</a>
-    <form class="inline" method="post" action="/agents/start"><button class="btn primary" {{ 'disabled' if running }}>{{ 'Running…' if running else '▶ Start applying' }}</button></form>
+    <a class="btn" href="/queue">{{ icon('plus') }} Add jobs</a>
+    <form class="inline" method="post" action="/agents/start"><button class="btn primary" {{ 'disabled' if running }}>{% if running %}Running…{% else %}{{ icon('play') }} Start applying{% endif %}</button></form>
   </div>
 </div>
 
 {% if not setup_done %}
 <div class="card" style="margin-bottom:16px">
-  <div class="row spread"><h2>Get set up</h2><span class="muted small">{{ steps|selectattr('done')|list|length }} / {{ steps|length }} done</span></div>
+  <div class="row spread"><h2>Get set up</h2><span class="muted small mono">{{ steps|selectattr('done')|list|length }} / {{ steps|length }}</span></div>
   <div class="progress" style="margin-bottom:8px"><div style="width: {{ (100 * (steps|selectattr('done')|list|length) / steps|length)|int }}%"></div></div>
   {% for s in steps %}
-  <div class="check"><span class="tick {{ 'ok' if s.done }}">{{ '✓' if s.done else loop.index }}</span>
+  <div class="check"><span class="tick {{ 'ok' if s.done }}">{% if s.done %}{{ icon('check', 14) }}{% else %}{{ loop.index }}{% endif %}</span>
     <div style="flex:1"><a href="{{ s.href }}">{{ s.label }}</a></div></div>
   {% endfor %}
 </div>
 {% endif %}
 
-<div class="grid g4" style="margin-bottom:16px">
-  <div class="card stat"><div class="n">{{ counts.get('applied', 0) }}</div><div class="l">Applied</div></div>
-  <div class="card stat"><div class="n">{{ counts.get('queued', 0) }}</div><div class="l">In queue</div></div>
-  <div class="card stat"><div class="n">{{ counts.get('ready-for-review', 0) + counts.get('pending-user', 0) }}</div><div class="l"><a href="/inbox">Need you</a></div></div>
-  <div class="card stat"><div class="n">{{ counts.get('skipped', 0) + counts.get('blocked', 0) }}</div><div class="l">Skipped / blocked</div></div>
-</div>
+<section class="card pipeline" style="margin-bottom:16px">
+  <div class="row spread"><h2 style="margin:0">Pipeline</h2><span class="muted small mono">{{ n_total }} job{{ 's' if n_total != 1 }} tracked</span></div>
+  <div class="stages">
+    <a class="stage s-queued" href="/queue"><span class="l">Queued</span><span class="n">{{ n_queued }}</span></a>
+    <a class="stage s-running" href="/agents"><span class="l">Running</span><span class="n">{{ n_running }}</span></a>
+    <a class="stage s-need key {{ 'zero' if not n_need }}" href="/inbox"><span class="l">Need you</span><span class="n">{{ n_need }}</span></a>
+    <a class="stage s-applied" href="/tracker?status=applied"><span class="l">Applied</span><span class="n">{{ n_applied }}</span></a>
+    <a class="stage s-off" href="/tracker?status=skipped,blocked,failed,easy-apply"><span class="l">Skipped, blocked or manual</span><span class="n">{{ n_off }}</span></a>
+  </div>
+  {% if n_total %}
+  <div class="bar" role="img" aria-label="Share of tracked jobs in each stage">
+    {% for cls, n in [('s-applied', n_applied), ('s-need', n_need), ('s-running', n_running), ('s-queued', n_queued), ('s-off', n_off)] %}{% if n %}<span class="{{ cls }}" style="flex: {{ n }}"></span>{% endif %}{% endfor %}
+  </div>
+  {% endif %}
+</section>
 
 <div class="grid g2">
   <div class="card">
-    <div class="row spread"><h2>Agents</h2><a class="small" href="/agents">Open live view →</a></div>
+    <div class="row spread"><h2>Agents</h2><a class="small" href="/agents">Open live view</a></div>
     {% if snap.workers %}
       {% for w in snap.workers %}
-      <div class="check"><span class="pulse {{ 'on' if w.busy }}"></span>
-        <div style="flex:1"><b>Worker {{ w.n }}</b> <span class="muted small">{{ (w.job.company or w.job.url)[:60] if w.job else 'idle' }}</span></div></div>
+      <div class="check" style="align-items:center"><span class="pulse {{ 'on' if w.busy }}"></span>
+        <div style="flex:1;min-width:0" class="ellipsis"><b style="font-weight:500">Worker {{ w.n }}</b> <span class="muted small">{{ (w.job.company or w.job.url)[:60] if w.job else 'idle' }}</span></div></div>
       {% endfor %}
     {% else %}<p class="muted">No run yet. Add jobs to the queue and press Start.</p>{% endif %}
   </div>
   <div class="card">
-    <div class="row spread"><h2>Recent activity</h2><a class="small" href="/tracker">Tracker →</a></div>
+    <div class="row spread"><h2>Recent activity</h2><a class="small" href="/tracker">Tracker</a></div>
     {% for j in recent %}
-      <div class="check"><span class="chip {{ j.status }}">{{ j.status }}</span>
-        <div style="flex:1;min-width:0"><a href="/job/{{ j.id }}">{{ j.company or j.url[:50] }}</a> <span class="muted small">{{ j.role[:50] }}</span></div></div>
-    {% else %}<p class="muted">Nothing yet.</p>{% endfor %}
+      <div class="check" style="align-items:center">
+        <div style="flex:1;min-width:0" class="ellipsis"><a href="/job/{{ j.id }}">{{ j.company or j.url[:50] }}</a> <span class="muted small">{{ j.role[:50] }}</span></div>
+        <span class="chip {{ j.status }}">{{ j.status|status_label }}</span></div>
+    {% else %}<p class="muted">Nothing yet</p>{% endfor %}
   </div>
 </div>
 {% endblock %}

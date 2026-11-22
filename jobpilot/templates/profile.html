@@ -4,12 +4,12 @@
   <div><h1>Knowledge base</h1><p class="muted">Agents only ever use facts from this page. Keep it accurate.</p></div>
   <form class="inline" method="post" action="/profile/from-resume" x-data="{ busy: false }" @submit="busy = true">
     <button class="btn" :disabled="busy" {{ 'disabled' if not has_resume }} title="Uses your Claude Code login">
-      <span class="spinner" x-show="busy"></span><span x-text="busy ? 'Reading your resume…' : '✨ Draft from my resume'">✨ Draft from my resume</span></button>
+      <span class="spinner" x-show="busy"></span><span x-show="!busy">{{ icon('file-text') }}</span><span x-text="busy ? 'Reading your resume…' : 'Draft from my resume'">Draft from my resume</span></button>
   </form>
 </div>
 
 <div class="card" style="margin-bottom:16px">
-  <div class="row spread"><b>Profile completeness</b><span class="muted small">{{ pct }}%</span></div>
+  <div class="row spread"><b style="font-weight:500">Profile completeness</b><span class="muted small mono">{{ pct }}%</span></div>
   <div class="progress" style="margin:8px 0"><div style="width: {{ pct }}%"></div></div>
   {% if missing %}<p class="small muted" style="margin:0">Still needed: {{ missing|join(', ') }}</p>{% endif %}
 </div>
@@ -26,10 +26,10 @@
         <input type="hidden" name="{{ f.key }}" :value="value">
         <div class="chipset">
           <template x-for="o in options" :key="o">
-            <button type="button" class="pick" :class="has(o) && 'on'" @click="toggle(o)"><span x-text="has(o) ? '✓ ' + o : o"></span></button>
+            <button type="button" class="pick" :class="has(o) && 'on'" @click="toggle(o)"><span x-show="has(o)" x-html="icon('check')"></span><span x-text="o"></span></button>
           </template>
           <template x-for="o in extra" :key="o">
-            <button type="button" class="pick on custom" @click="toggle(o)" title="Remove"><span x-text="'✓ ' + o + '  ×'"></span></button>
+            <button type="button" class="pick on custom" @click="toggle(o)" title="Remove"><span x-text="o"></span><span x-html="icon('x')"></span></button>
           </template>
         </div>
         <div class="row" style="margin-top:8px">
@@ -48,7 +48,7 @@
 
   <div class="card" x-data='{ rows: {{ work|tojson }} }'>
     <div class="row spread"><h2 style="margin:0">Work history <span class="muted small">newest first</span></h2>
-      <button type="button" class="btn sm" @click="rows.push({company:'', title:'', location:'', start_m:'', end_m:'', present: rows.length === 0})">+ Add job</button></div>
+      <button type="button" class="btn sm" @click="rows.push({company:'', title:'', location:'', start_m:'', end_m:'', present: rows.length === 0})">{{ icon('plus', 14) }} Add job</button></div>
     <input type="hidden" name="work_count" :value="rows.length">
     <template x-for="(w, i) in rows" :key="i">
       <div class="workrow">
@@ -59,16 +59,16 @@
         <div class="field"><label>End</label>
           <input type="month" :name="'work_' + i + '_end'" x-model="w.end_m" :disabled="w.present">
           <label class="check-inline"><input type="checkbox" :name="'work_' + i + '_present'" value="1" x-model="w.present"> Present</label></div>
-        <button type="button" class="btn sm danger rm" @click="rows.splice(i, 1)" title="Remove">✕</button>
+        <button type="button" class="iconbtn rm" @click="rows.splice(i, 1)" title="Remove" aria-label="Remove">{{ icon('x') }}</button>
       </div>
     </template>
-    <div class="empty" x-show="!rows.length">No jobs yet. Press “Add job”.</div>
+    <div class="empty" x-show="!rows.length">No jobs yet. Press Add job to start.</div>
   </div>
   <div class="row"><button class="btn primary">Save profile</button></div>
 </form>
 
 <form method="post" action="/profile/md" class="card" id="kb" style="margin-top:16px">
-  <div class="row spread"><h2>Experience, ready-made answers & learned answers</h2><button class="btn primary sm">Save</button></div>
+  <div class="row spread"><h2>Experience and answers</h2><button class="btn primary sm">Save</button></div>
   <p class="small muted">Markdown. Agents use the bullets for essays and screening questions. Answers you give in <a href="/inbox">Needs you</a> land in the “Answers learned” table at the bottom.</p>
   <textarea class="code" name="md">{{ md }}</textarea>
 </form>

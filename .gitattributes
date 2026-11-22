@@ -1,0 +1,5 @@
+# Keep LF line endings on every OS: the engine is bash (also run by Git Bash on Windows), and CRLF breaks it.
+* text=auto eol=lf
+*.pdf binary
+*.png binary
+*.ico binary

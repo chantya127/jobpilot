@@ -6,6 +6,7 @@ import subprocess
 from pypdf import PdfReader
 
 from . import profile
+from .procs import child_env, exe, group_kwargs
 
 PROMPT = """Extract a job-application profile from this resume. Reply with ONLY a JSON object, no prose, with keys:
 "fields": object with any of these keys you can fill from the resume (omit unknown ones, never guess):
@@ -29,9 +30,9 @@ def draft(path) -> dict:
     if not text.strip():
         raise ValueError("No text found in the PDF (is it a scanned image?)")
     keys = ", ".join(k for k, *_ in profile.FIELDS)
-    out = subprocess.run(["claude", "-p", PROMPT.format(keys=keys, text=text), "--model", "sonnet",
-                          "--output-format", "json", "--tools", ""],
-                         capture_output=True, text=True, timeout=240)
+    out = subprocess.run([exe("claude"), "-p", "--model", "sonnet", "--output-format", "json", "--tools", ""],
+                         input=PROMPT.format(keys=keys, text=text), capture_output=True, text=True,
+                         encoding="utf-8", errors="replace", env=child_env(), timeout=240, **group_kwargs())
     if out.returncode != 0:
         raise RuntimeError(f"claude failed: {(out.stderr or out.stdout)[-400:]}")
     result = json.loads(out.stdout).get("result", "")

@@ -1,6 +1,6 @@
 # JobPilot helper kit. Every Bash call of a worker starts with:
 #   cd "$JP_HOME" && source "$JP_ENGINE/jobkit.sh" <worker>
-# Then use $AB (agent-browser wired to this worker's own browser window). Works in bash and zsh.
+# Then use $AB (agent-browser wired to this worker's own browser window). Works in bash and zsh, incl. Git Bash on Windows.
 # Personal values come from $JP_HOME/profile.env (generated from the dashboard profile); secrets from secrets.env.
 W=${1:-1}
 : "${JP_HOME:=$HOME/.jobpilot}"
@@ -19,7 +19,7 @@ _chars(){ printf '%s' "$1" | grep -o .; }
 nopicker(){ $AB eval '(()=>{if(window.__ja_guard)return "ok";window.__ja_guard=1;const isF=el=>el&&el.tagName==="INPUT"&&el.type==="file";const P=HTMLInputElement.prototype,c=P.click;P.click=function click(){if(this.type==="file")return;return c.call(this)};if(P.showPicker){const s=P.showPicker;P.showPicker=function showPicker(){if(this.type==="file")return;return s.call(this)}};if(window.showOpenFilePicker)window.showOpenFilePicker=function showOpenFilePicker(){return Promise.reject(new DOMException("The user aborted a request.","AbortError"))};document.addEventListener("click",e=>{const t=e.composedPath?e.composedPath()[0]:e.target;if(isF(t))e.preventDefault()},true);return "ok"})()' >/dev/null; }
 # tclick <target> [fallback-js]: trusted --human click. Runs the JS fallback ONLY when the click definitely did not happen.
 # Prints ok | fb:<js result> | maybe: <err> | fail: <err>; returns 0 | 0 | 2 | 1.
-tclick(){ local o; o=$($AB click "$1" --human 2>&1) && { echo ok; return 0; }; if printf %s "$o" | grep -qiE 'os error 35|temporarily unavailable|timed? ?out'; then echo "maybe: ${o:0:200}"; return 2; fi; if [ -n "$2" ]; then echo "fb:$($AB eval "$2")"; return 0; fi; echo "fail: ${o:0:200}"; return 1; }
+tclick(){ local o; o=$($AB click "$1" --human 2>&1) && { echo ok; return 0; }; if printf %s "$o" | grep -qiE 'os error (11|35|10035)|temporarily unavailable|could not be completed immediately|timed? ?out'; then echo "maybe: ${o:0:200}"; return 2; fi; if [ -n "$2" ]; then echo "fb:$($AB eval "$2")"; return 0; fi; echo "fail: ${o:0:200}"; return 1; }
 # up '<css of input[type=file]>': guard + upload the active resume without ever opening the picker.
 up(){ nopicker; $AB upload "${1:-input[type=file]}" "$JP_RESUME"; }
 # formdump: every visible field in ONE call -> "f3 | select | Notice period* | current | options…" (keys for fillform)

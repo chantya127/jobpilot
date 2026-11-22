@@ -1,7 +1,6 @@
 """FastAPI dashboard. Server-rendered Jinja pages + HTMX partials; everything runs locally."""
 import platform
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import __version__, browser, chat, config, db, otp, profile, ui
 from .orchestrator import ORCH
+from .procs import IS_WIN, OS_NAME, child_env, git_bash, group_kwargs, which
 
 HERE = Path(__file__).parent
 app = FastAPI(title="JobPilot")
@@ -52,7 +52,9 @@ def back(url: str, flash: str = "") -> RedirectResponse:
 
 def run_ok(cmd: list[str], timeout=20) -> tuple[bool, str]:
     try:
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        cmd = [which(cmd[0]) or cmd[0], *cmd[1:]]
+        out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
+                             env=child_env(), **group_kwargs())
         return out.returncode == 0, (out.stdout or out.stderr).strip().splitlines()[0] if (out.stdout or out.stderr).strip() else ""
     except Exception as e:
         return False, str(e)
@@ -64,23 +66,34 @@ def system_checks(deep: bool = False) -> list[dict]:
     def add(key, label, ok, detail, fix):
         checks.append({"key": key, "label": label, "ok": ok, "detail": detail, "fix": fix})
 
-    add("os", "macOS or Linux", platform.system() in ("Darwin", "Linux"), platform.system(),
-        "On Windows, run JobPilot inside WSL.")
+    add("os", "macOS, Linux or Windows", OS_NAME in ("macOS", "Linux", "Windows"), f"{OS_NAME} {platform.release()}",
+        "Use macOS, Linux or Windows 10/11.")
+    if IS_WIN:
+        gb = git_bash()
+        add("git-bash", "Git for Windows (Git Bash)", bool(gb), gb or "not found",
+            "winget install --id Git.Git -e   (Claude Code runs the agents' shell commands in Git Bash). If Git is "
+            "installed somewhere unusual, set CLAUDE_CODE_GIT_BASH_PATH to its bin\\bash.exe.")
+    curl = which("curl")
+    add("curl", "curl", bool(curl), curl or "not found",
+        "Install curl with your package manager (e.g. sudo apt install curl).")
     add("python", "Python 3.10+", sys.version_info >= (3, 10), platform.python_version(), "Install Python 3.10+ (uv does this for you).")
-    node = shutil.which("node")
+    node = which("node")
     add("node", "Node.js 20+", bool(node), run_ok(["node", "-v"])[1] if node else "not found",
         "Install Node.js 20+ from nodejs.org or with your package manager.")
-    ab = shutil.which("agent-browser")
+    ab = which("agent-browser")
     add("agent-browser", "agent-browser", bool(ab), run_ok(["agent-browser", "--version"])[1] if ab else "not found",
         "npm install -g agent-browser")
-    cl = shutil.which("claude")
+    cl = which("claude")
     detail = run_ok(["claude", "--version"])[1] if cl else "not found"
     ok = bool(cl)
+    if cl and IS_WIN and cl.lower().endswith((".cmd", ".bat")):
+        detail += " (npm .cmd shim: the native installer is more reliable on Windows)"
     if cl and deep:
         ok, out = run_ok(["claude", "-p", "Reply with the single word: ok", "--model", "haiku"], timeout=90)
         detail = "logged in" if ok else f"not logged in: {out[:120]}"
     add("claude", "Claude Code CLI (logged in)", ok, detail,
-        "npm install -g @anthropic-ai/claude-code, then run `claude` once in a terminal to log in.")
+        ("Install Claude Code (Windows PowerShell: irm https://claude.ai/install.ps1 | iex; macOS/Linux: "
+         "curl -fsSL https://claude.ai/install.sh | bash), then run `claude` once in a terminal to log in."))
     bp = browser.browser_path()
     add("browser", "Chromium-based browser", bool(bp), bp or "none found", "Install Chrome, Brave, Chromium or Edge.")
     try:
@@ -287,7 +300,7 @@ def scraper_lines() -> list[dict]:
     if not f.exists():
         return []
     out = []
-    for line in f.read_text(errors="replace").splitlines():
+    for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
         if not line.strip():
             continue
         m = LOG_TAG.match(line)
@@ -299,9 +312,10 @@ def scraper_lines() -> list[dict]:
 def find_run():
     if not scraper_busy():
         config.ensure_dirs()
-        log = open(config.LOGS / "scraper.log", "w")
+        log = open(config.LOGS / "scraper.log", "w", encoding="utf-8")
         SCRAPER["proc"] = subprocess.Popen([sys.executable, "-u", "-m", "jobpilot.scraper"], stdout=log,
-                                           stderr=subprocess.STDOUT, cwd=config.HOME, start_new_session=True)
+                                           stderr=subprocess.STDOUT, cwd=config.HOME, env=child_env(),
+                                           **group_kwargs())
     return {"ok": True}
 
 
@@ -314,7 +328,7 @@ def find_stop():
             p.wait(5)
         except subprocess.TimeoutExpired:
             p.kill()
-        with open(config.LOGS / "scraper.log", "a") as f:
+        with open(config.LOGS / "scraper.log", "a", encoding="utf-8") as f:
             f.write("[done] Stopped by you\n")
     return {"ok": True}
 

@@ -94,23 +94,23 @@ PROFILE_MD_TEMPLATE = """# Application knowledge base
 
 
 def load() -> dict:
-    p = json.loads(config.PROFILE_JSON.read_text()) if config.PROFILE_JSON.exists() else {}
+    p = json.loads(config.PROFILE_JSON.read_text(encoding="utf-8")) if config.PROFILE_JSON.exists() else {}
     p.setdefault("work", [])
     return p
 
 
 def load_md() -> str:
-    return config.PROFILE_MD.read_text() if config.PROFILE_MD.exists() else PROFILE_MD_TEMPLATE
+    return config.PROFILE_MD.read_text(encoding="utf-8") if config.PROFILE_MD.exists() else PROFILE_MD_TEMPLATE
 
 
 def save_md(text: str) -> None:
     config.ensure_dirs()
-    config.PROFILE_MD.write_text(text)
+    config.PROFILE_MD.write_text(text, encoding="utf-8")
 
 
 def save(p: dict) -> None:
     config.ensure_dirs()
-    config.PROFILE_JSON.write_text(json.dumps(p, indent=2))
+    config.PROFILE_JSON.write_text(json.dumps(p, indent=2), encoding="utf-8")
     render(p)
 
 
@@ -146,9 +146,10 @@ def render(p: dict | None = None) -> None:
         "JP_CUR_START_MONTH": start[0] if len(start) == 2 else "",
         "JP_CUR_START_YEAR": start[1] if len(start) == 2 else "",
         "JP_DEGREE": p.get("degree", ""),
-        "JP_RESUME": str(resume) if resume else "",
+        "JP_RESUME": resume.as_posix() if resume else "",      # bash path form (Git Bash on Windows)
     }
-    config.PROFILE_ENV.write_text("".join(f"export {k}={shlex.quote(v)}\n" for k, v in env.items()))
+    config.PROFILE_ENV.write_text("".join(f"export {k}={shlex.quote(v)}\n" for k, v in env.items()),
+                                  encoding="utf-8", newline="\n")
 
     lines = ["# Standard answers (generated from the dashboard profile; profile.md's 'Answers learned' wins)", ""]
     for key, label, _section, _ph in FIELDS:
@@ -169,7 +170,7 @@ def render(p: dict | None = None) -> None:
     ]
     if s.get("stack_accept"):
         lines.append(f"- **Stack:** {', '.join(s['stack_accept'])}.")
-    (config.HOME / "answers.md").write_text("\n".join(lines) + "\n")
+    (config.HOME / "answers.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def completeness(p: dict | None = None) -> tuple[int, list[str]]:

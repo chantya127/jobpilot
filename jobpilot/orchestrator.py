@@ -4,11 +4,7 @@ Replaces the old /research coordinator skill: queue filtering, one job per worke
 tenant at once, parsing the worker's one-line result, NEEDS (-> dashboard inbox) and LEARNED (-> portals-local.md).
 """
 import json
-import os
-import platform
 import re
-import shutil
-import signal
 import subprocess
 import sys
 import threading
@@ -16,6 +12,7 @@ import time
 import urllib.parse
 
 from . import browser, config, db, profile
+from .procs import KeepAwake, child_env, exe, group_kwargs, kill_tree, posix, which
 
 # Worker sessions must not load the user's personal Claude Code setup (hooks that rewrite every Bash command, MCP
 # servers that may hang on connect, skills/plugins): it slows every step and bloats the context.
@@ -56,7 +53,7 @@ def prefilter(job, s) -> tuple[str, str] | None:
 
 
 def render_prompt(job, worker: int, s: dict) -> str:
-    tpl = (config.engine_dir() / "agents" / "job-applier.md").read_text()
+    tpl = (config.engine_dir() / "agents" / "job-applier.md").read_text(encoding="utf-8")
     if s.get("auto_submit"):
         mode = ("AUTO-SUBMIT is ON. The user has pre-approved submitting, creating portal accounts with their "
                 "secrets.env credentials, and ticking required consent/terms boxes. Do not ask before submitting.")
@@ -85,7 +82,7 @@ def render_prompt(job, worker: int, s: dict) -> str:
         check += (" Also, if the hiring company is one of: " + ", ".join(s["avoid_companies"])
                   + ' → jlog ... skipped "Avoided company", close the tab, report skipped.')
     vals = {
-        "JP_HOME": str(config.HOME), "JP_ENGINE": str(config.engine_dir()), "WORKER": str(worker),
+        "JP_HOME": posix(config.HOME), "JP_ENGINE": posix(config.engine_dir()), "WORKER": str(worker),
         "URL": job["url"], "MODE_LINE": mode, "OTP_LINE": otp_line, "STACK_LINE": stack_line,
         "STACK_CHECK": check, "FINISH_STEP": finish,
         "GUIDANCE": (f"User's instructions for this run (follow them; they override the defaults below except the "
@@ -153,12 +150,12 @@ class Orchestrator:
         self.workers: dict[int, Worker] = {}
         self.running = False
         self.thread = None
-        self.caffeinate = None
+        self.awake = KeepAwake()
         self.message = ""
         self.run = None            # {"started", "jobs": {job_id: status}} while a run is active
         self.end_reason = ""
         try:
-            self.last_run = json.loads((config.HOME / "last_run.json").read_text())
+            self.last_run = json.loads((config.HOME / "last_run.json").read_text(encoding="utf-8"))
         except Exception:
             self.last_run = None
 
@@ -193,7 +190,7 @@ class Orchestrator:
                              "counts": counts, "total": len(jobs), "jobs": rows[-50:], "totals": tot,
                              "agents": self.run.get("agents", 0)}
             try:
-                (config.HOME / "last_run.json").write_text(json.dumps(self.last_run))
+                (config.HOME / "last_run.json").write_text(json.dumps(self.last_run), encoding="utf-8")
             except OSError:
                 pass
             self.run = None
@@ -223,8 +220,7 @@ class Orchestrator:
             self.last_run = None
             for w in self.workers.values():
                 w.last_job = None
-            if platform.system() == "Darwin" and shutil.which("caffeinate"):
-                self.caffeinate = subprocess.Popen(["caffeinate", "-dims"])
+            self.awake.start()
             self.thread = threading.Thread(target=self._loop, daemon=True)
             self.thread.start()
 
@@ -251,10 +247,7 @@ class Orchestrator:
             return
         job_id = w.job_id
         w.killed = True
-        try:
-            os.killpg(w.proc.pid, signal.SIGTERM)
-        except Exception:
-            w.proc.terminate()
+        kill_tree(w.proc, wait=None)       # the reader thread reaps it
         if job_id:
             self._record(job_id, "stopped")
             if requeue:
@@ -265,9 +258,8 @@ class Orchestrator:
                 db.add_event(job_id, n, "info", "Stopped by user")
 
     def _stop_caffeinate_if_idle(self):
-        if self.caffeinate and not any(w.proc for w in self.workers.values()) and not self.running:
-            self.caffeinate.terminate()
-            self.caffeinate = None
+        if self.awake.active and not any(w.proc for w in self.workers.values()) and not self.running:
+            self.awake.stop()
 
     # ---------------------------------------------------------------- loop
     def _loop(self):
@@ -302,9 +294,11 @@ class Orchestrator:
 
     def _spawn(self, w: Worker, job, s):
         prompt = render_prompt(job, w.n, s)
-        env = dict(os.environ, JP_HOME=str(config.HOME), JP_ENGINE=str(config.engine_dir()), JP_PY=sys.executable,
-                   JP_REVIEW="0" if s.get("auto_submit") else "1")
-        cmd = ["claude", "-p", prompt, "--model", s.get("model") or "sonnet",
+        # Paths in bash form (Git Bash on Windows); UTF-8 for the jobpilot.tools calls the agent makes.
+        env = child_env(JP_HOME=posix(config.HOME), JP_ENGINE=posix(config.engine_dir()), JP_PY=posix(sys.executable),
+                        JP_REVIEW="0" if s.get("auto_submit") else "1")
+        # The prompt goes in on stdin: no command-line length/quoting limits (Windows .cmd shims break on newlines).
+        cmd = [exe("claude"), "-p", "--model", s.get("model") or "sonnet",
                "--output-format", "stream-json", "--verbose",
                "--tools", "Bash", "Read", "Grep", "Glob",          # the only tools that exist for the worker
                "--allowedTools", "Bash", "Read", "Grep", "Glob",   # ...and they run without permission prompts
@@ -316,9 +310,16 @@ class Orchestrator:
                                                      "started": time.time()})
         db.set_status(job["id"], "running", worker=w.n, needs="")
         db.add_event(job["id"], w.n, "info", f"Agent #{w.agent or '?'} started in window {w.n}")
-        log = open(config.LOGS / f"job-{job['id']}.jsonl", "a")
-        w.proc = subprocess.Popen(cmd, cwd=config.HOME, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                  text=True, bufsize=1, start_new_session=True)
+        browser.ensure_up(w.n)
+        log = open(config.LOGS / f"job-{job['id']}.jsonl", "a", encoding="utf-8")
+        w.proc = subprocess.Popen(cmd, cwd=config.HOME, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                  stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", bufsize=1,
+                                  **group_kwargs())
+        try:
+            w.proc.stdin.write(prompt)
+            w.proc.stdin.close()
+        except OSError:
+            pass
         w.job_id, w.started, w.step = job["id"], time.time(), "Starting"
         threading.Thread(target=self._read, args=(w, job, log), daemon=True).start()
 
@@ -366,19 +367,7 @@ class Orchestrator:
     @staticmethod
     def _terminate(proc):
         """End the Claude session and its whole process group (background shells, sleeps, polls)."""
-        if proc.poll() is None:
-            try:
-                os.killpg(proc.pid, signal.SIGTERM)
-            except Exception:
-                proc.terminate()
-            try:
-                proc.wait(5)
-            except subprocess.TimeoutExpired:
-                try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except Exception:
-                    proc.kill()
-                proc.wait()
+        kill_tree(proc)
         try:
             proc.stdout.close()
         except Exception:
@@ -393,7 +382,7 @@ class Orchestrator:
         db.log(job["url"], r["company"], r["role"], "", r["status"], notes, needs=r["needs"], worker=w.n)
         if r["learned"]:
             config.LEARNED.parent.mkdir(parents=True, exist_ok=True)
-            with open(config.LEARNED, "a") as f:
+            with open(config.LEARNED, "a", encoding="utf-8") as f:
                 host = urllib.parse.urlsplit(job["url"]).netloc
                 f.write(f"- **{r['company'] or host}** ({host}): {r['learned']}\n")
 
@@ -438,9 +427,9 @@ class Orchestrator:
 
 def preflight(s: dict) -> list[str]:
     problems = []
-    if not shutil.which("claude"):
+    if not which("claude"):
         problems.append("Claude Code CLI not found")
-    if not shutil.which("agent-browser"):
+    if not which("agent-browser"):
         problems.append("agent-browser not found (npm i -g agent-browser)")
     if not browser.browser_path():
         problems.append("no Chromium-based browser found")
