@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import __version__, browser, chat, config, db, otp, profile, ui
+from . import __version__, browser, chat, config, db, learned, otp, profile, ui
 from .orchestrator import ORCH
 from .procs import IS_WIN, OS_NAME, child_env, git_bash, group_kwargs, which
 
@@ -182,6 +182,13 @@ async def profile_save(request: Request):
 def profile_md_save(md: str = Form("")):
     profile.save_md(md)
     return back("/profile#kb", "Knowledge base saved")
+
+
+@app.post("/profile/tidy-learned")
+def profile_tidy_learned():
+    n = learned.tidy()
+    return back("/profile#kb", f"Answers learned rewritten as {n} reusable rows. Check them below"
+                if n else "No learned answers to tidy yet")
 
 
 @app.post("/profile/from-resume")
@@ -468,9 +475,9 @@ def inbox(request: Request):
 
 @app.post("/inbox/{job_id}/answer")
 def inbox_answer(job_id: int, question: str = Form(...), answer: str = Form(...)):
-    profile.append_learned(question, answer)
+    rows = learned.learn(question, answer)
     db.set_status(job_id, "queued", needs="", notes="Answered: re-queued")
-    return back("/inbox", "Saved to your knowledge base and re-queued")
+    return back("/inbox", f"Saved as {len(rows)} answer{'s' if len(rows) != 1 else ''} in your knowledge base and re-queued")
 
 
 @app.post("/inbox/{job_id}/{action}")

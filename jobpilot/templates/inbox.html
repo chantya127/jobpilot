@@ -13,10 +13,10 @@
   </div>
   <p style="margin:10px 0 12px">{{ j.needs or j.notes }}</p>
   {% if it.question %}
-  <form method="post" action="/inbox/{{ j.id }}/answer" class="row">
+  <form method="post" action="/inbox/{{ j.id }}/answer" class="row" x-data="{ busy: false }" @submit="busy = true">
     <input type="hidden" name="question" value="{{ it.question }}">
     <input type="text" name="answer" placeholder="Your answer, saved to your knowledge base" required style="flex:1">
-    <button class="btn primary">Save and retry</button>
+    <button class="btn primary" :disabled="busy"><span class="spinner" x-show="busy"></span><span x-text="busy ? 'Saving…' : 'Save and retry'">Save and retry</span></button>
   </form>
   {% else %}
   <div class="row">

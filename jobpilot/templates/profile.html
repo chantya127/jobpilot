@@ -69,7 +69,11 @@
 
 <form method="post" action="/profile/md" class="card" id="kb" style="margin-top:16px">
   <div class="row spread"><h2>Experience and answers</h2><button class="btn primary sm">Save</button></div>
-  <p class="small muted">Markdown. Agents use the bullets for essays and screening questions. Answers you give in <a href="/inbox">Needs you</a> land in the “Answers learned” table at the bottom.</p>
+  <p class="small muted">Markdown. Agents use the bullets for essays and screening questions. Answers you give in <a href="/inbox">Needs you</a> are saved as reusable rows (one fact each, no company or tab details) in the “Answers learned” table at the bottom.</p>
   <textarea class="code" name="md">{{ md }}</textarea>
+</form>
+<form method="post" action="/profile/tidy-learned" class="row" style="margin-top:8px" x-data="{ busy: false }" @submit="busy = true">
+  <button class="btn sm" :disabled="busy" title="Uses your Claude Code login. Save any edits above first."><span class="spinner" x-show="busy"></span><span x-text="busy ? 'Tidying…' : 'Tidy answers learned'">Tidy answers learned</span></button>
+  <span class="small muted">Rewrites older rows into short, reusable question/answer pairs.</span>
 </form>
 {% endblock %}
