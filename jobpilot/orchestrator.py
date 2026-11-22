@@ -44,11 +44,14 @@ def prefilter(job, s) -> tuple[str, str] | None:
             return "skipped", f"Avoided company: {name}"
     if s.get("skip_easy_apply", True) and re.search(r"linkedin\.com/jobs/view/", low):
         return "pending-user", "LinkedIn job page: open it and use the company's own Apply link (Easy Apply is never automated)"
-    if s.get("stack_accept"):
-        for lang in s.get("stack_skip", []):
-            token = re.escape(lang.lower()).replace(r"\#", "#")
-            if re.search(rf"(?<![a-z]){token}(?![a-z])", urllib.parse.unquote(low).replace("-", " ")):
-                return "skipped", f"Stack mismatch: {lang}"
+    # The job description isn't known yet (the agent checks it); here only the URL slug and any saved role title.
+    keys = job.keys() if hasattr(job, "keys") else ()
+    text = (urllib.parse.unquote(low) + " " + str((job["role"] if "role" in keys else "") or "").lower())
+    text = re.sub(r"[-_/]+", " ", text)
+    for term in s.get("stack_skip", []):
+        token = re.escape(re.sub(r"[-_/]+", " ", term.strip().lower())).replace(r"\ ", r"\s+")
+        if token and re.search(rf"(?<![a-z0-9]){token}(?![a-z0-9+#])", text):
+            return "skipped", f"Skip list: {term.strip()}"
     return None
 
 
@@ -70,14 +73,22 @@ def render_prompt(job, worker: int, s: dict) -> str:
                   f"Use status ready-for-review with `NEEDS: review and submit in worker {worker} tab <id>`.")
     otp_line = ("enabled: use `otp` as described in portals.md." if s.get("otp_enabled")
                 else "disabled: when a portal emails a code, stop at the code prompt and return pending-user.")
+    skip = ", ".join(t.strip() for t in s.get("stack_skip", []) if t.strip())
+    checks = []
+    if skip:
+        checks.append(f"Read the title + JD. Skip list: {skip}. If any of these appears in the job title or in the "
+                      "required/must-have skills, qualifications or responsibilities, don't apply: "
+                      'jlog ... skipped "Skip list: <term>", close the tab, report skipped. Mentions only under '
+                      "nice-to-have/preferred/bonus, or in the company blurb, are fine.")
     if s.get("stack_accept"):
         accept = ", ".join(s["stack_accept"])
         stack_line = f"Applicant's stack: {accept}."
-        check = (f"Read the title + JD. If the role's primary/required language is one the applicant doesn't use "
-                 f"(e.g. {', '.join(s.get('stack_skip', []))}) and {accept} is not an accepted alternative, don't apply: "
-                 'jlog ... skipped "Stack mismatch: <lang>", close the tab, report skipped. Language-agnostic roles are fine.')
+        checks.append(f"If the role's primary/required language is one the applicant doesn't use and {accept} is not "
+                      'an accepted alternative, don\'t apply: jlog ... skipped "Stack mismatch: <lang>", close the tab, '
+                      "report skipped. Language-agnostic roles are fine.")
     else:
-        stack_line, check = "", "No stack filter is set: skip this step."
+        stack_line = ""
+    check = " ".join(checks) or "No stack filter is set: skip this step."
     if s.get("avoid_companies"):
         check += (" Also, if the hiring company is one of: " + ", ".join(s["avoid_companies"])
                   + ' → jlog ... skipped "Avoided company", close the tab, report skipped.')

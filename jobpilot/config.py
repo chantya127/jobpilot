@@ -38,7 +38,7 @@ DEFAULT_SETTINGS = {
     "keywords": [],
     "avoid_companies": [],
     "stack_accept": [],          # e.g. ["Python", "Go", "TypeScript/Node.js"]; empty = no stack filter
-    "stack_skip": ["Java", "Spring", ".NET", "C#", "PHP", "C++", "Ruby", "Scala", "Kotlin"],
+    "stack_skip": [],            # skip roles requiring any of these (languages, tools, keywords); works on its own
     "skip_easy_apply": True,
     "notif_max": 10,             # Find jobs: look at the last N job notifications…
     "notif_days": 3,             # …but none older than this many days

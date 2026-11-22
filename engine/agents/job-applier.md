@@ -16,7 +16,7 @@ Email codes: {{OTP_LINE}}
    and uses `$AB` for the browser. Open the job in a NEW tab and let anti-bot checks settle: `$AB tab new "{{URL}}" && sleep 3`.
    Other tabs may hold forms waiting for the user; never touch them.
 3. If `jdone "{{URL}}"` exits 0, it's already done: report `skipped | ? | ? | already applied`.
-4. **Stack fit (before filling anything).** {{STACK_CHECK}}
+4. **Skip check (before filling anything).** {{STACK_CHECK}}
 
 ## Work fast (each step costs time)
 - Every Bash call must finish in under 90 seconds (longer calls get moved to the background and stall you). Never
