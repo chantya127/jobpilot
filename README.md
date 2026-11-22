@@ -84,7 +84,7 @@ Use the native Claude Code installer above rather than `npm i -g @anthropic-ai/c
 
 ### Then, on every OS
 ```bash
-git clone <repo-url> jobpilot
+git clone https://github.com/chantya127/jobpilot.git
 cd jobpilot
 uv sync                    # creates .venv with Python 3.10+ and all dependencies
 uv run jobpilot --check    # verifies every requirement; prints the fix for anything missing
