@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="head">
+  <div><h1>Queue</h1><p class="muted">{{ jobs|length }} job{{ 's' if jobs|length != 1 }} waiting · duplicates and already-applied jobs are dropped automatically</p></div>
+  <div class="row">
+    {% if jobs %}<form class="inline" method="post" action="/queue/clear" onsubmit="return confirm('Remove every queued job?')"><button class="btn danger">Clear all</button></form>{% endif %}
+    <form class="inline" method="post" action="/agents/start"><button class="btn primary" {{ 'disabled' if running or not jobs }}>▶ Start applying</button></form>
+  </div>
+</div>
+
+<form class="card dropzone" method="post" action="/queue/add" x-data="{ t: '' }" style="margin-bottom:16px">
+  <div class="row spread"><h2 style="margin:0">Add job links</h2>
+    <span class="small muted" x-text="(t.match(/https?:\/\/\S+/g) || []).length + ' link(s) detected'"></span></div>
+  <textarea name="urls" x-model="t" placeholder="Paste one or many job URLs: anything with https://… is picked up, other text is ignored." style="min-height:90px;margin-top:10px"></textarea>
+  <div class="row" style="margin-top:10px"><button class="btn primary" :disabled="!t.match(/https?:\/\//)">Add to queue</button>
+    <a class="small" href="/find">or find jobs on LinkedIn →</a></div>
+</form>
+
+{% if jobs %}
+<div class="card" style="padding:0">
+  {% for j in jobs %}
+  {% set host = j.url.split('/')[2] if '://' in j.url else j.url %}
+  <div class="qrow">
+    <span class="qn">{{ loop.index }}</span>
+    <div class="qicon">{{ (j.company or host.replace('www.', ''))[:1]|upper }}</div>
+    <div style="min-width:0;flex:1">
+      <div class="row" style="gap:8px"><b>{{ j.company or host }}</b>{% if j.role %}<span class="muted">· {{ j.role }}</span>{% endif %}</div>
+      <a class="small muted ellipsis" href="{{ j.url }}" target="_blank" style="display:block">{{ j.url }}</a>
+    </div>
+    <span class="chip">{{ j.source }}</span>
+    <form class="inline" method="post" action="/queue/{{ j.id }}/delete"><button class="btn sm" title="Remove">✕</button></form>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card empty">The queue is empty. Paste links above or use <a href="/find">Find jobs</a>.</div>
+{% endif %}
+{% endblock %}

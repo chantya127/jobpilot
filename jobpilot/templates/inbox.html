@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="head"><div><h1>Needs you</h1><p class="muted">Things the agents won't do on their own: reviews, captchas, codes and questions about you.</p></div></div>
+{% for it in items %}{% set j = it.job %}
+<div class="card" style="margin-bottom:12px">
+  <div class="row spread">
+    <div class="row"><span class="chip {{ j.status }}">{{ j.status }}</span>
+      <b>{{ j.company or 'Unknown company' }}</b><span class="muted">{{ j.role }}</span></div>
+    <div class="row">
+      <a class="btn sm primary" href="/job/{{ j.id }}/open?next=/inbox" title="Brings up the tab with this form in worker {{ j.worker or 1 }}'s window">Open in worker {{ j.worker or 1 }} window</a>
+      <a class="btn sm" href="/job/{{ j.id }}">Log</a>
+    </div>
+  </div>
+  <p style="margin:10px 0 12px">{{ j.needs or j.notes }}</p>
+  {% if it.question %}
+  <form method="post" action="/inbox/{{ j.id }}/answer" class="row">
+    <input type="hidden" name="question" value="{{ it.question }}">
+    <input type="text" name="answer" placeholder="Your answer (saved to your knowledge base for next time)" required style="flex:1">
+    <button class="btn primary">Save & retry</button>
+  </form>
+  {% else %}
+  <div class="row">
+    {% if j.status == 'ready-for-review' %}<span class="small muted">Check the filled form in the worker window, press Submit there, then:</span>{% endif %}
+    <form class="inline" method="post" action="/inbox/{{ j.id }}/applied"><button class="btn primary sm">✓ I submitted it</button></form>
+    <form class="inline" method="post" action="/inbox/{{ j.id }}/retry"><button class="btn sm">↻ Retry with agent</button></form>
+    <form class="inline" method="post" action="/inbox/{{ j.id }}/skip"><button class="btn sm">Skip</button></form>
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="card empty">Nothing needs you right now. 🎉</div>
+{% endfor %}
+{% endblock %}

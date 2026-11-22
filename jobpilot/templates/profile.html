@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="head">
+  <div><h1>Knowledge base</h1><p class="muted">Agents only ever use facts from this page. Keep it accurate.</p></div>
+  <form class="inline" method="post" action="/profile/from-resume" x-data="{ busy: false }" @submit="busy = true">
+    <button class="btn" :disabled="busy" {{ 'disabled' if not has_resume }} title="Uses your Claude Code login">
+      <span class="spinner" x-show="busy"></span><span x-text="busy ? 'Reading your resume…' : '✨ Draft from my resume'">✨ Draft from my resume</span></button>
+  </form>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="row spread"><b>Profile completeness</b><span class="muted small">{{ pct }}%</span></div>
+  <div class="progress" style="margin:8px 0"><div style="width: {{ pct }}%"></div></div>
+  {% if missing %}<p class="small muted" style="margin:0">Still needed: {{ missing|join(', ') }}</p>{% endif %}
+</div>
+
+<form method="post" action="/profile" class="stack">
+  {% for section, fields in sections.items() %}
+  <div class="card">
+    <h2>{{ section }}</h2>
+    <div class="grid {{ 'g1' if fields|selectattr('options')|list|length == fields|length else 'g2' }}">
+      {% for f in fields %}
+      {% if f.options %}
+      <div class="field" x-data='chips({{ f.value|tojson }}, {{ f.options|tojson }}, {{ f.single|tojson }})'>
+        <label>{{ f.label }} <span class="hint">· {{ 'pick one' if f.single else 'pick all that apply' }}, or add your own</span></label>
+        <input type="hidden" name="{{ f.key }}" :value="value">
+        <div class="chipset">
+          <template x-for="o in options" :key="o">
+            <button type="button" class="pick" :class="has(o) && 'on'" @click="toggle(o)"><span x-text="has(o) ? '✓ ' + o : o"></span></button>
+          </template>
+          <template x-for="o in extra" :key="o">
+            <button type="button" class="pick on custom" @click="toggle(o)" title="Remove"><span x-text="'✓ ' + o + '  ×'"></span></button>
+          </template>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <input type="text" x-model="custom" @keydown.enter.prevent="add()" placeholder="Custom answer, then Enter" style="max-width:340px">
+          <button type="button" class="btn sm" @click="add()">Add</button>
+        </div>
+      </div>
+      {% else %}
+      <div class="field"><label for="{{ f.key }}">{{ f.label }}</label>
+        <input type="text" id="{{ f.key }}" name="{{ f.key }}" value="{{ f.value }}" placeholder="{{ f.ph }}"></div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="card" x-data='{ rows: {{ work|tojson }} }'>
+    <div class="row spread"><h2 style="margin:0">Work history <span class="muted small">newest first</span></h2>
+      <button type="button" class="btn sm" @click="rows.push({company:'', title:'', location:'', start_m:'', end_m:'', present: rows.length === 0})">+ Add job</button></div>
+    <input type="hidden" name="work_count" :value="rows.length">
+    <template x-for="(w, i) in rows" :key="i">
+      <div class="workrow">
+        <div class="field"><label>Company</label><input type="text" :name="'work_' + i + '_company'" x-model="w.company"></div>
+        <div class="field"><label>Title</label><input type="text" :name="'work_' + i + '_title'" x-model="w.title"></div>
+        <div class="field"><label>Location</label><input type="text" :name="'work_' + i + '_location'" x-model="w.location"></div>
+        <div class="field"><label>Start</label><input type="month" :name="'work_' + i + '_start'" x-model="w.start_m"></div>
+        <div class="field"><label>End</label>
+          <input type="month" :name="'work_' + i + '_end'" x-model="w.end_m" :disabled="w.present">
+          <label class="check-inline"><input type="checkbox" :name="'work_' + i + '_present'" value="1" x-model="w.present"> Present</label></div>
+        <button type="button" class="btn sm danger rm" @click="rows.splice(i, 1)" title="Remove">✕</button>
+      </div>
+    </template>
+    <div class="empty" x-show="!rows.length">No jobs yet. Press “Add job”.</div>
+  </div>
+  <div class="row"><button class="btn primary">Save profile</button></div>
+</form>
+
+<form method="post" action="/profile/md" class="card" id="kb" style="margin-top:16px">
+  <div class="row spread"><h2>Experience, ready-made answers & learned answers</h2><button class="btn primary sm">Save</button></div>
+  <p class="small muted">Markdown. Agents use the bullets for essays and screening questions. Answers you give in <a href="/inbox">Needs you</a> land in the “Answers learned” table at the bottom.</p>
+  <textarea class="code" name="md">{{ md }}</textarea>
+</form>
+{% endblock %}

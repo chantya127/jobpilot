@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="head"><div><h1>Setup</h1><p class="muted">Takes about 10 minutes, once.</p></div></div>
+
+<div class="grid g2">
+  <div class="card" id="checks">
+    <div class="row spread"><h2>1 · Requirements</h2>
+      <a class="btn sm" href="/setup?deep=1">{{ 'Re-check' if deep else 'Check Claude login too' }}</a></div>
+    {% for c in checks %}
+    <div class="check"><span class="tick {{ 'ok' if c.ok else 'bad' }}">{{ '✓' if c.ok else '!' }}</span>
+      <div style="flex:1;min-width:0"><b>{{ c.label }}</b> <span class="muted small">{{ c.detail }}</span>
+        {% if not c.ok and c.fix %}<div class="small" style="margin-top:4px">Fix: <code>{{ c.fix }}</code></div>{% endif %}</div></div>
+    {% endfor %}
+  </div>
+
+  <div class="card">
+    <h2>2 · Your steps</h2>
+    {% for s in steps %}
+    <div class="check"><span class="tick {{ 'ok' if s.done }}">{{ '✓' if s.done else loop.index }}</span>
+      <div style="flex:1"><a href="{{ s.href }}">{{ s.label }}</a></div></div>
+    {% endfor %}
+    <div class="note info small" style="margin-top:12px">
+      Agents run with <b>your own Claude Code login</b>: each job is one Claude session (Sonnet by default), which uses your plan's quota.
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h2>How it works</h2>
+  <div class="grid g4 small">
+    <div><b>1. Knowledge base</b><p class="muted">Your resume and standard answers. Agents only use facts from here.</p></div>
+    <div><b>2. Queue</b><p class="muted">Paste job links or let <i>Find jobs</i> collect them from LinkedIn.</p></div>
+    <div><b>3. Agents</b><p class="muted">Each worker has its own browser window and fills one application at a time.</p></div>
+    <div><b>4. You decide</b><p class="muted">Agents submit for you (auto-submit), or turn it off to review each form first. Captchas and new questions come to <i>Needs you</i>.</p></div>
+  </div>
+</div>
+{% endblock %}

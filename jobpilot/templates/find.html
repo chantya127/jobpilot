@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block content %}
+{% set kw = settings.keywords %}
+<div x-data="findPage({{ busy|tojson }}, {{ (kw and settings.keyword_search)|tojson }})" x-cloak>
+<div class="head">
+  <div><h1>Find jobs</h1><p class="muted">Turns your LinkedIn job alerts into a ready-to-apply queue.</p></div>
+  <a class="btn" href="/preferences">⚙ Search settings</a>
+</div>
+
+<!-- ============ IDLE ============ -->
+<template x-if="!busy">
+<div class="stack">
+  <section class="card hero">
+    <div class="hero-ic">🔍</div>
+    <div style="flex:1;min-width:0">
+      <h2 style="margin:0 0 4px">Find new jobs</h2>
+      <p class="muted" style="margin:0">
+        Checks your last <b>{{ settings.notif_max }}</b> LinkedIn job alerts from the past <b>{{ settings.notif_days|round(1)|string|replace('.0','') }} days</b>{% if kw %}
+        that mention <b>{{ kw[:3]|join(', ') }}{{ '…' if kw|length > 3 }}</b>{% endif %}{% if kw and settings.keyword_search %}, then searches LinkedIn for each keyword{% endif %}.
+        New company apply links go to your queue.</p>
+    </div>
+    <button class="btn primary lg" @click="start()" :disabled="starting">
+      <span class="spinner" x-show="starting"></span><span x-text="starting ? 'Starting…' : 'Find jobs'"></span></button>
+  </section>
+
+  <template x-if="summary">
+  <section class="card">
+    <div class="row spread" style="margin-bottom:16px">
+      <div><h2 style="margin:0">Last search</h2>
+        <span class="small muted" x-text="(summary.stopped ? 'Stopped by you' : (summary.complete ? 'Finished' : 'Ended')) + ' · ' + summary.finished"></span></div>
+      <a class="btn" href="/queue" x-show="summary.counts.queued">Review queue →</a>
+    </div>
+    <div class="note bad small" x-show="summary.login_needed" style="margin-bottom:14px">
+      LinkedIn isn't logged in. Open <a href="/settings#browser">Settings → Open worker 1 browser</a>, log in once, then search again.</div>
+    <div class="note warn small" x-show="summary.error && !summary.login_needed" x-text="summary.error" style="margin-bottom:14px"></div>
+    <div class="sumgrid">
+      <div class="sum accent"><b x-text="summary.counts.queued"></b><span>new jobs queued</span></div>
+      <div class="sum warn"><b x-text="summary.counts.easy"></b><span>Easy Apply, yours to do</span></div>
+      <div class="sum"><b x-text="summary.counts.known"></b><span>already seen</span></div>
+      <div class="sum"><b x-text="summary.counts.skip"></b><span>skipped</span></div>
+    </div>
+    <button class="linkbtn small" style="margin-top:14px" @click="details = !details" x-text="details ? 'Hide details' : 'Show details'"></button>
+  </section>
+  </template>
+
+  <section class="card empty" x-show="!summary">No searches yet. Press <b>Find jobs</b> to run your first one.</section>
+</div>
+</template>
+
+<!-- ============ RUNNING ============ -->
+<template x-if="busy">
+<section class="card">
+  <div class="row spread">
+    <div class="row"><span class="spinner" style="color:var(--accent)"></span><h2 style="margin:0">Searching LinkedIn…</h2></div>
+    <button class="btn danger" @click="stop()" :disabled="stopping" x-text="stopping ? 'Stopping…' : '■ Stop'"></button>
+  </div>
+  <ol class="stepper">
+    <li :class="stepClass('notifications')"><span class="dot"></span>Read job alerts</li>
+    <li x-show="hasSearch" :class="stepClass('search')"><span class="dot"></span>Search keywords</li>
+    <li :class="stepClass('done')"><span class="dot"></span>Done</li>
+  </ol>
+  <div class="activity"><span class="muted small">Now</span><span class="ellipsis" x-text="activity"></span></div>
+  <div class="sumgrid" style="margin-top:18px">
+    <div class="sum accent"><b x-text="counts.queued"></b><span>new jobs queued</span></div>
+    <div class="sum warn"><b x-text="counts.easy"></b><span>Easy Apply</span></div>
+    <div class="sum"><b x-text="counts.known"></b><span>already seen</span></div>
+    <div class="sum"><b x-text="counts.skip"></b><span>skipped</span></div>
+  </div>
+  <button class="linkbtn small" style="margin-top:14px" @click="details = !details" x-text="details ? 'Hide details' : 'Show details'"></button>
+</section>
+</template>
+
+<!-- ============ DETAILS (log) ============ -->
+<section class="card" style="padding:0;margin-top:16px" x-show="details && lines.length" x-transition>
+  <div class="row spread" style="padding:12px 18px;border-bottom:1px solid var(--line)"><b class="small">Details</b>
+    <button class="btn sm" x-show="!follow" @click="jump()">↓ Latest</button></div>
+  <div class="feed" x-ref="feed" @scroll="follow = nearBottom($el)">
+    <template x-for="(l, i) in lines.filter(l => l.tag !== 'phase')" :key="i">
+      <div :class="'fl ' + l.tag">
+        <span class="ic" x-text="{queued:'＋', known:'·', easy:'★', skip:'–', error:'!', done:'✓'}[l.tag] || ''"></span>
+        <span class="tx" x-text="l.text"></span>
+      </div>
+    </template>
+  </div>
+</section>
+</div>
+{% endblock %}

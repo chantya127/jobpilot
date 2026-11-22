@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+{% macro qs(pp) %}?status={{ status }}&portal={{ portal|urlencode }}&q={{ q|urlencode }}&p={{ pp }}{% endmacro %}
+<div class="head">
+  <div><h1>Tracker</h1><p class="muted">{{ total }} job{{ 's' if total != 1 }}{{ ' match your filters' if sel or q or portal }}</p></div>
+  <div class="row">
+    <form method="post" action="/tracker/import" enctype="multipart/form-data" x-data
+          title="Import an existing tracker.csv (url,company,role,portal,status,date,notes)">
+      <label class="btn" style="margin:0">Import CSV<input type="file" name="file" accept=".csv" hidden @change="$el.form.submit()"></label>
+    </form>
+    <a class="btn" href="/tracker.csv">Export CSV</a>
+  </div>
+</div>
+
+<form class="filterbar card tight" method="get" action="/tracker" x-ref="f"
+      x-data='{ open: false, sel: {{ sel|tojson }}, get label() { return this.sel.length ? this.sel.join(", ") : "All statuses" } }'
+      @keydown.escape="open = false">
+  <input type="hidden" name="status" :value="sel.join(',')">
+  <div class="dd" @click.outside="if (open) { open = false; $refs.f.submit() }">
+    <button type="button" class="ddbtn" @click="open = !open">
+      <span class="muted small">Status</span><b class="ellipsis" x-text="label"></b><span class="muted">▾</span></button>
+    <div class="ddmenu" x-show="open" x-transition.origin.top>
+      {% for s in statuses %}
+      <label class="ddopt"><input type="checkbox" value="{{ s }}" x-model="sel">
+        <span class="chip {{ s }}">{{ s }}</span><span class="muted small" style="margin-left:auto">{{ counts.get(s, 0) }}</span></label>
+      {% endfor %}
+      <div class="row spread" style="padding:8px 10px 4px;border-top:1px solid var(--line);margin-top:4px">
+        <button type="button" class="linkbtn small" @click="sel = []">Clear</button>
+        <button type="button" class="btn primary sm" @click="open = false; $refs.f.submit()">Apply</button>
+      </div>
+    </div>
+  </div>
+  <div class="dd">
+    <select name="portal" class="ddselect" onchange="this.form.submit()">
+      <option value="">All portals</option>
+      {% for pt in portals %}<option value="{{ pt }}" {{ 'selected' if pt == portal }}>{{ pt }}</option>{% endfor %}
+    </select>
+  </div>
+  <input type="search" name="q" value="{{ q }}" placeholder="Search company, role, notes…" style="flex:1;min-width:200px">
+  <button class="btn">Search</button>
+  {% if sel or q or portal %}<a class="btn sm" href="/tracker">✕ Clear filters</a>{% endif %}
+</form>
+
+<div class="quick">
+  {% for s in ['applied', 'ready-for-review', 'pending-user', 'queued', 'skipped', 'blocked'] %}{% if counts.get(s) %}
+  <a class="qchip {{ 'on' if sel == [s] }}" href="/tracker?status={{ s }}"><span class="chip {{ s }}">{{ s }}</span><b>{{ counts[s] }}</b></a>
+  {% endif %}{% endfor %}
+</div>
+
+<div x-data="trackerActs({{ rows|map(attribute='id')|list|tojson }})">
+<div class="bulkbar" x-show="sel.length" x-transition>
+  <b x-text="sel.length + ' selected'"></b>
+  <select x-model="bulk"><option value="">Set status…</option>
+    {% for s in statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select>
+  <button class="btn sm primary" :disabled="!bulk" @click="apply(sel, bulk)">Apply</button>
+  <button class="btn sm danger" @click="apply(sel, 'delete')">Delete</button>
+  <button class="linkbtn small" @click="sel = []">Clear selection</button>
+</div>
+<div class="card" style="padding:0;overflow:hidden">
+  <table class="tracker">
+    <colgroup><col style="width:40px"><col style="width:100px"><col style="width:20%"><col style="width:22%"><col style="width:190px"><col><col style="width:48px"></colgroup>
+    <thead><tr><th><input type="checkbox" :checked="sel.length && sel.length === ids.length" @change="sel = $event.target.checked ? [...ids] : []"></th>
+      <th>Date</th><th>Company</th><th>Role</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr onclick="location.href='/job/{{ r.id }}'" :class="sel.includes({{ r.id }}) && 'picked'">
+      <td onclick="event.stopPropagation()"><input type="checkbox" value="{{ r.id }}" x-model.number="sel"></td>
+      <td class="muted small">{{ (r.updated or '')[:10] }}</td>
+      <td><b>{{ r.company or '—' }}</b><div class="small"><a class="muted" href="/job/{{ r.id }}/open?next={{ ('/tracker' + qs(p))|urlencode }}" onclick="event.stopPropagation()" title="Open in worker {{ r.worker or 1 }}'s window">{{ portal_of(r) or 'link' }} ↗</a></div></td>
+      <td>{{ r.role }}</td>
+      <td class="acts" onclick="event.stopPropagation()">
+        <select class="statussel {{ r.status }}" @change="apply([{{ r.id }}], $event.target.value)" title="Change status">
+          {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if s == r.status }}>{{ s }}</option>{% endfor %}
+        </select></td>
+      <td class="small muted"><div class="clamp2" title="{{ r.notes }}">{{ r.notes }}</div></td>
+      <td onclick="event.stopPropagation()"><button class="iconbtn" title="Delete" @click="apply([{{ r.id }}], 'delete')">🗑</button></td></tr>
+    {% else %}<tr><td colspan="7" class="empty">No jobs match these filters.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+</div>
+
+{% if pages > 1 %}
+<div class="pager">
+  <a class="btn sm {{ 'disabled' if p == 1 }}" href="{{ qs(p - 1) }}">← Prev</a>
+  {% for i in range(1, pages + 1) %}
+    {% if i == 1 or i == pages or (i - p)|abs <= 2 %}<a class="pg {{ 'on' if i == p }}" href="{{ qs(i) }}">{{ i }}</a>
+    {% elif (i - p)|abs == 3 %}<span class="muted">…</span>{% endif %}
+  {% endfor %}
+  <a class="btn sm {{ 'disabled' if p == pages }}" href="{{ qs(p + 1) }}">Next →</a>
+  <span class="muted small">{{ (p - 1) * 25 + 1 }}–{{ [p * 25, total]|min }} of {{ total }}</span>
+</div>
+{% endif %}
+{% endblock %}

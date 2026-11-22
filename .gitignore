@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+dist/
+build/
+*.egg-info/
+# never commit personal data
+*.env
+secrets.env
+*.db
+*.pdf
+tracker.csv
+browser-profiles/
+.jobpilot/
+.DS_Store

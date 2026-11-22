@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="head"><div><h1>Resumes</h1><p class="muted">The active resume is uploaded to every application.</p></div></div>
+<div class="grid g2">
+  <div class="card">
+    <h2>Your files</h2>
+    {% for f in files %}
+    <div class="check"><span class="tick {{ 'ok' if f.active }}">{{ '★' if f.active else '·' }}</span>
+      <div style="flex:1;min-width:0"><a href="/resumes/file/{{ f.name }}" target="_blank">{{ f.name }}</a>
+        <span class="muted small">{{ f.size }} KB{{ ' · active' if f.active }}</span></div>
+      {% if not f.active %}
+      <form class="inline" method="post" action="/resumes/active"><input type="hidden" name="name" value="{{ f.name }}"><button class="btn sm">Use this</button></form>
+      {% endif %}
+      <form class="inline" method="post" action="/resumes/delete" onsubmit="return confirm('Delete {{ f.name }}?')"><input type="hidden" name="name" value="{{ f.name }}"><button class="btn sm danger">Delete</button></form>
+    </div>
+    {% else %}<div class="empty">No resume yet.</div>{% endfor %}
+  </div>
+  <div class="card">
+    <h2>Upload</h2>
+    <form method="post" action="/resumes/upload" enctype="multipart/form-data" class="stack">
+      <input type="file" name="file" accept="application/pdf" required>
+      <button class="btn primary">Upload PDF</button>
+    </form>
+    <div class="note small" style="margin-top:16px">Tip: after uploading, open <a href="/profile">Knowledge base</a> and press <b>Draft from my resume</b> to fill most fields automatically.</div>
+  </div>
+</div>
+{% endblock %}

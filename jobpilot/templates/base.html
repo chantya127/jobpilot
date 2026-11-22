@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}JobPilot{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"></script>
+  <script>window.ICONS = {{ ICONS|tojson }}; window.STATUS_LABELS = {{ STATUS_LABELS|tojson }};</script>
+  <script src="/static/app.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+<body>
+<div class="app">
+  <nav class="side">
+    <div class="brand">{{ icon("plane", 18) }} JobPilot</div>
+    {% for key, href, label in nav %}
+      <a class="nav {{ 'on' if active == key }}" href="{{ href }}">
+        <span>{{ label }}</span>
+        {% if key == 'inbox' and inbox_count %}<span class="badge">{{ inbox_count }}</span>{% endif %}
+        {% if key == 'agents' and running %}<span class="pulse on"></span>{% endif %}
+      </a>
+    {% endfor %}
+    <div class="foot">
+      {{ 'Auto-submit on' if settings.auto_submit else 'Review before submit' }} · {{ settings.workers }} worker{{ 's' if settings.workers != 1 }}<br>
+      v{{ version }} · runs only on this computer
+    </div>
+  </nav>
+  <main class="main {% block mainclass %}{% endblock %}">
+    {% if flash %}<div class="flash" x-data x-init="setTimeout(() => $el.remove(), 3500)">{{ flash }}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+</body>
+</html>

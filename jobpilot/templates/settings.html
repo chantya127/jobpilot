@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="head"><div><h1>Settings</h1><p class="muted">Secrets are stored only in <code>~/.jobpilot/secrets.env</code> on this computer and are never shown again.</p></div></div>
+
+<form method="post" action="/settings" class="card" style="margin-bottom:16px" x-data="{ auto: {{ 'true' if settings.auto_submit else 'false' }} }">
+  <h2>How agents work</h2>
+  <div class="grid g2">
+    <label class="toggle"><input type="checkbox" name="auto_submit" x-model="auto" {{ 'checked' if settings.auto_submit }}
+        @change="if (auto && !confirm('Agents will submit applications without asking you. Continue?')) auto = false"><span class="sw"></span>
+      <span><b>Auto-submit applications</b>
+        <span class="small muted" x-show="!auto">Off: agents fill and check every form, then stop before Submit so you can review it.</span>
+        <span class="small" style="color:var(--warn)" x-show="auto">On: agents press Submit, create portal accounts and tick required consents for you.</span></span></label>
+    <div class="grid g2">
+      <div class="field"><label>Parallel workers</label>
+        <select name="workers">{% for n in range(1, 5) %}<option value="{{ n }}" {{ 'selected' if settings.workers == n }}>{{ n }}</option>{% endfor %}</select>
+        <p class="small muted">Each worker = 1 browser window + 1 Claude session.</p></div>
+      <div class="field"><label>Model</label>
+        <select name="model">{% for m in ['sonnet', 'opus', 'haiku'] %}<option {{ 'selected' if settings.model == m }}>{{ m }}</option>{% endfor %}</select>
+        <p class="small muted">Sonnet is the tested default.</p></div>
+    </div>
+  </div>
+  <div class="field" id="browser"><label>Browser</label>
+    <select name="browser_path">
+      {% for b in browsers %}<option value="{{ b }}" {{ 'selected' if b == current_browser }}>{{ b.split('/')[-1] }} · {{ b }}</option>{% endfor %}
+      {% if not browsers %}<option value="">No Chromium-based browser found</option>{% endif %}
+    </select></div>
+  <button class="btn primary">Save</button>
+</form>
+
+<div class="grid g2">
+  <div class="card">
+    <h2>Worker browsers</h2>
+    <p class="small muted">Each worker has its own browser profile in <code>~/.jobpilot/browser-profiles</code>. Open one to log in to LinkedIn (needed for Find jobs), Gmail or job portals once; the login is remembered.</p>
+    <div class="row">
+      {% for n in range(1, settings.workers + 1) %}
+      <form class="inline" method="post" action="/browser/open/{{ n }}"><input type="hidden" name="url" value="https://www.linkedin.com/login"><button class="btn">Open worker {{ n }} browser</button></form>
+      {% endfor %}
+    </div>
+    {% if real_profiles %}
+    <details style="margin-top:14px"><summary class="small">Advanced: copy my existing browser profile into the workers</summary>
+      <form method="post" action="/settings/copy-profile" class="stack" style="margin-top:10px" onsubmit="return confirm('This replaces the worker profiles. Close that browser first. Continue?')">
+        <select name="src">{% for p in real_profiles %}<option value="{{ p.path }}">{{ p.label }}</option>{% endfor %}</select>
+        <p class="small muted">Saved logins only carry over if the workers use that same browser. The agents will then act inside your real accounts.</p>
+        <button class="btn">Copy profile</button>
+      </form></details>
+    {% endif %}
+  </div>
+
+  {% macro secret(name, label, hint='', kind='password', ph='') %}
+  <div class="field"><label>{{ label }}{% if hint %} <span class="hint">· {{ hint }}</span>{% endif %} {% if have[name] %}<span class="chip applied">saved</span>{% endif %}</label>
+    <div class="reveal" x-data="{ show: false }">
+      <input :type="show ? 'text' : '{{ kind }}'" type="{{ kind }}" name="{{ name }}" value="{{ sec.get(name, '') }}" placeholder="{{ ph }}" autocomplete="off" spellcheck="false">
+      <button type="button" class="eye" @click="show = !show" :title="show ? 'Hide' : 'Show'" x-text="show ? '🙈' : '👁'">👁</button>
+    </div></div>
+  {% endmacro %}
+  <form class="card" method="post" action="/settings/secrets" id="accounts">
+    <h2>Job portal account</h2>
+    <p class="small muted">Used to sign in to or create accounts on Workday, Oracle, Taleo and similar portals. Use a password you don't use anywhere else.</p>
+    {{ secret('email', 'Email', kind='password', ph='you@example.com') }}
+    <div class="grid g2">
+      {{ secret('password', 'Password') }}
+      {{ secret('password_strong', 'Stronger password', 'for strict portals') }}
+    </div>
+    {{ secret('pan', 'National ID / PAN', 'optional, some Indian portals require it') }}
+    <button class="btn primary">Save</button>
+  </form>
+</div>
+
+<div class="card" id="otp" style="margin-top:16px" x-data="{ on: {{ 'true' if settings.otp_enabled else 'false' }} }">
+  <h2>Email verification codes</h2>
+  <form method="post" action="/settings/otp" class="grid g2">
+    <div>
+      <label class="toggle" style="margin-bottom:14px"><input type="checkbox" name="otp_enabled" x-model="on" {{ 'checked' if settings.otp_enabled }}><span class="sw"></span>
+        <span><b>Let agents read verification codes from my Gmail</b><span class="small muted">Read-only IMAP. The agent only picks up codes and verification links for the portal it's working on. Off: code prompts go to <i>Needs you</i>.</span></span></label>
+      <div x-show="on">
+        <div class="field"><label>Gmail address {% if have.gmail_user %}<span class="chip applied">saved</span>{% endif %}</label><input type="email" name="gmail_user" value="{{ gmail_user }}" placeholder="you@gmail.com"></div>
+        {{ secret('gmail_app_password', 'App password', ph='16 characters, spaces are fine') }}
+      </div>
+      <div class="row"><button class="btn primary">Save</button>
+        <button class="btn" type="button" x-show="on" hx-post="/settings/otp/test" hx-target="#otp-result"
+                hx-indicator="#otp-busy" hx-disabled-elt="this">Test connection</button>
+        <span id="otp-busy" class="htmx-indicator small muted"><span class="spinner"></span> Connecting to Gmail… this can take up to 20 seconds</span></div>
+      <div id="otp-result" style="margin-top:12px"></div>
+    </div>
+    <div class="note" x-show="on">
+      <b>How to get a Gmail app password (2 minutes)</b>
+      <ol class="steps small" style="margin-top:8px">
+        <li>Turn on 2-Step Verification: <a href="https://myaccount.google.com/signinoptions/twosv" target="_blank">myaccount.google.com/signinoptions/twosv</a></li>
+        <li>Open <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a></li>
+        <li>Type a name such as <code>JobPilot</code> and press <b>Create</b>.</li>
+        <li>Copy the 16-character code, paste it here, then press <b>Save</b> and <b>Test connection</b>.</li>
+      </ol>
+      <p class="small muted">Use the same Gmail address that you apply with. You can revoke the app password at any time on the same page. Google Workspace accounts may need an admin to allow app passwords.</p>
+    </div>
+  </form>
+</div>
+{% endblock %}

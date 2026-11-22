@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block mainclass %}wide{% endblock %}
+{% block content %}
+<div x-data="agentsApp()">
+<div class="head">
+  <div><h1>Live agents</h1><p class="muted">Each worker drives its own browser window. Scroll a log freely: it only follows new output while you're at the bottom.</p></div>
+  <div class="row">
+    <span class="chip" :class="state.auto_submit ? 'applied' : 'pending-user'" x-text="state.auto_submit ? 'auto-submit' : 'review before submit'"></span>
+    <span class="muted small" x-text="state.queued + ' in queue'"></span>
+    <template x-if="state.running">
+      <div class="row"><button class="btn" @click="act('pause')" title="Workers finish their current job, then stop">⏸ Pause</button>
+        <button class="btn danger" @click="act('stop')">■ Stop now</button></div>
+    </template>
+    <template x-if="!state.running">
+      <button class="btn primary" @click="act('start')" :disabled="!state.queued">▶ Start</button>
+    </template>
+  </div>
+</div>
+<div class="note warn small" x-show="state.message" x-text="state.message" style="margin-bottom:12px"></div>
+
+<!-- this run (live) -->
+<div class="card tight runstrip" x-show="state.active">
+  <div class="row"><span class="spinner" style="color:var(--accent)"></span>
+    <b x-text="state.finishing ? 'Finishing the current jobs, then stopping…' : 'Run in progress'"></b></div>
+  <div class="row small">
+    <template x-for="[k, v] in Object.entries(state.run_counts || {})" :key="k">
+      <span class="chip" :class="k" x-text="k + ' · ' + v"></span></template>
+    <span class="muted" x-show="!Object.keys(state.run_counts || {}).length">No jobs finished yet</span>
+  </div>
+</div>
+
+<!-- last run summary (after the run ends, everything else is back to idle) -->
+<template x-if="!state.active && state.last_run">
+<section class="card" style="margin-bottom:16px">
+  <div class="row spread" style="margin-bottom:16px">
+    <div><h2 style="margin:0">Last run</h2>
+      <span class="small muted" x-text="state.last_run.reason + ' · started ' + state.last_run.started + ' · ' + elapsed(state.last_run.duration)
+        + ' · ' + (state.last_run.agents || state.last_run.total) + ' agents'
+        + (state.last_run.totals ? ' · ' + tok(state.last_run.totals.tokens) + ' tokens · $' + state.last_run.totals.cost.toFixed(2) : '')"></span></div>
+    <div class="row">
+      <a class="btn" href="/inbox" x-show="needsYou(state.last_run.counts)">Open Needs you →</a>
+      <button class="btn sm" @click="dismiss()">Dismiss</button>
+    </div>
+  </div>
+  <div class="sumgrid">
+    <div class="sum ok"><b x-text="state.last_run.counts.applied || 0"></b><span>applied</span></div>
+    <div class="sum warn"><b x-text="needsYou(state.last_run.counts)"></b><span>need you (review, captcha, question)</span></div>
+    <div class="sum"><b x-text="state.last_run.counts.skipped || 0"></b><span>skipped</span></div>
+    <div class="sum bad"><b x-text="(state.last_run.counts.blocked || 0) + (state.last_run.counts.failed || 0) + (state.last_run.counts.stopped || 0)"></b><span>blocked / stopped</span></div>
+  </div>
+  <div class="runjobs" x-show="state.last_run.jobs.length">
+    <template x-for="j in state.last_run.jobs" :key="j.id">
+      <a class="runjob" :href="'/job/' + j.id"><span class="chip" :class="j.status" x-text="j.status"></span>
+        <b class="ellipsis"><span class="muted" x-text="j.agent ? '#' + j.agent + ' ' : ''"></span><span x-text="j.company"></span></b>
+        <span class="muted ellipsis" x-text="j.role"></span>
+        <span class="muted small mono" x-text="j.stats ? dur(j.stats.seconds) + ' · ' + tok(tokens(j.stats)) : ''"></span></a>
+    </template>
+  </div>
+  <p class="small muted" style="margin:12px 0 0" x-show="!state.last_run.total">No job finished during this run.</p>
+</section>
+</template>
+
+<div class="workers" :class="'n' + state.workers.length">
+  <template x-for="w in state.workers" :key="w.n">
+    <section class="card wcard">
+      <header class="whead">
+        <div class="row"><span class="pulse" :class="w.busy && 'on'"></span>
+          <b x-text="w.busy && w.agent ? 'Agent #' + w.agent : 'Window ' + w.n"></b>
+          <span class="muted small" x-text="w.busy ? ('window ' + w.n + ' · ' + elapsed(w.elapsed)) : 'idle · next agent starts here'"></span></div>
+        <div class="row">
+          <button class="btn sm" @click="show(w.n)" title="Bring this worker's browser window up">Show browser</button>
+          <button class="btn sm danger" x-show="w.busy" @click="kill(w.n)">Stop</button>
+        </div>
+      </header>
+      <div class="wjob" x-show="w.job">
+        <a :href="w.job && '/job/' + w.job.id" class="wtitle" x-text="(w.job && w.job.company) || 'Opening job…'"></a>
+        <div class="small muted ellipsis" x-text="w.job && w.job.url"></div>
+        <div class="now"><span>Now</span><span class="ellipsis" x-text="w.step || 'Starting…'"></span></div>
+      </div>
+      <div class="wlog-wrap">
+        <div class="wlog" :id="'log-' + w.n">
+          <template x-for="e in (logs[w.n] || [])" :key="e.id">
+            <div :class="'ev ' + e.kind">
+              <span class="t" x-text="time(e.ts)"></span>
+              <span class="k" x-text="{tool:'⚙', text:'💬', result:'✓', info:'•'}[e.kind] || '•'"></span>
+              <span class="m" x-text="e.text"></span>
+            </div>
+          </template>
+          <div class="empty small" x-show="!(logs[w.n] || []).length">Waiting for a job.</div>
+        </div>
+        <button class="btn sm jump" x-show="follow[w.n] === false" @click="jump(w.n)">↓ Latest</button>
+      </div>
+    </section>
+  </template>
+</div>
+
+<!-- one row per finished job in this run (each job = its own agent session) -->
+<section class="card" style="padding:0;margin-bottom:16px" x-show="state.active && (state.history || []).length">
+  <div class="row spread" style="padding:12px 16px;border-bottom:1px solid var(--line)">
+    <b>Finished in this run</b><span class="muted small" x-text="state.history.length + ' job(s)'"></span></div>
+  <template x-for="h in state.history" :key="h.id">
+    <div class="hrow" :class="open[h.id] && 'open'">
+      <div class="hhead" @click="toggle(h.id)">
+        <span class="chip" :class="h.status" x-text="h.status"></span>
+        <span class="wbadge" :title="'Agent #' + h.agent + ' in window ' + h.worker" x-text="'#' + (h.agent || '?')"></span>
+        <b class="ellipsis" x-text="h.company"></b>
+        <span class="muted ellipsis" x-text="h.role"></span>
+        <span class="muted small ellipsis" x-text="h.note"></span>
+        <span class="muted small mono" x-text="dur(h.stats.seconds) + ' · ' + tok(tokens(h.stats))"></span>
+        <span class="muted" x-text="open[h.id] ? '▾' : '▸'"></span>
+      </div>
+      <div x-show="open[h.id]" class="hbody">
+        <div class="statgrid">
+          <div><span>Agent</span><b x-text="'#' + (h.agent || '?') + ' · window ' + h.worker"></b></div>
+          <div><span>Time taken</span><b x-text="dur(h.stats.seconds) + ' (started ' + h.started + ')'"></b></div>
+          <div><span>Steps</span><b x-text="h.stats.turns ?? '—'"></b></div>
+          <div><span>Tokens</span><b x-text="tok(tokens(h.stats))"></b></div>
+          <div><span>Input / output</span><b x-text="tok(h.stats.input) + ' / ' + tok(h.stats.output)"></b></div>
+          <div><span>Cache read / write</span><b x-text="tok(h.stats.cache_read) + ' / ' + tok(h.stats.cache_write)"></b></div>
+          <div><span>Cost (est.)</span><b x-text="h.stats.cost != null ? '$' + h.stats.cost.toFixed(2) : '—'"></b></div>
+          <div><span>Result</span><b class="ellipsis" :title="h.note" x-text="h.note || h.status"></b></div>
+        </div>
+        <div class="row" style="padding:0 16px 8px"><a class="btn sm" :href="'/job/' + h.id">Full log</a>
+          <a class="btn sm" :href="'/job/' + h.id + '/open?next=/agents'">Open in worker window</a></div>
+        <div class="wlog" style="height:280px">
+          <template x-for="e in (hist[h.id] || [])" :key="e.id">
+            <div :class="'ev ' + e.kind"><span class="t" x-text="time(e.ts)"></span>
+              <span class="k" x-text="{tool:'⚙', text:'💬', result:'✓', info:'•'}[e.kind] || '•'"></span>
+              <span class="m" x-text="e.text"></span></div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </template>
+</section>
+
+<section class="card chatcard">
+  <div class="row spread" style="margin-bottom:10px">
+    <div><h2 style="margin:0">Talk to the orchestrator</h2>
+      <p class="small muted" style="margin:2px 0 0">e.g. “skip Workday jobs for today”, “retry the Stripe one”, “what is worker 2 stuck on?”, “pause after these two”.</p></div>
+    <button class="btn sm" @click="resetChat()" x-show="chat.length">New conversation</button>
+  </div>
+  <div class="note small info" x-show="state.guidance" style="margin-bottom:10px">
+    <b>Standing guidance for new workers:</b> <span x-text="state.guidance"></span></div>
+  <div class="chatlog" x-ref="chat">
+    <template x-for="m in chat" :key="m.id">
+      <div :class="'msg ' + m.role"><div class="bubble" x-text="m.text"></div></div>
+    </template>
+    <div class="msg assistant" x-show="chatBusy"><div class="bubble typing"><span></span><span></span><span></span></div></div>
+    <div class="empty small" x-show="!chat.length && !chatBusy">No messages yet.</div>
+  </div>
+  <form class="chatbox" @submit.prevent="send()">
+    <textarea x-model="msg" rows="2" placeholder="Tell the orchestrator what to do… (Enter to send, Shift+Enter for a new line)"
+              @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); send(); }"></textarea>
+    <button class="btn primary" :disabled="chatBusy || !msg.trim()">Send</button>
+  </form>
+</section>
+</div>
+{% endblock %}

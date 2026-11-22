@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+{% if job %}
+<div class="head">
+  <div><h1>{{ job.company or 'Job' }}</h1><p class="muted">{{ job.role }}</p></div>
+  <div class="row"><span class="chip {{ job.status }}">{{ job.status }}</span><a class="btn" href="/job/{{ job.id }}/open?next=/job/{{ job.id }}">Open in worker {{ job.worker or 1 }} window</a></div>
+</div>
+<div class="grid" style="grid-template-columns: 1fr 2fr">
+  <div class="card small stack">
+    <div><b>URL</b><div class="mono" style="word-break:break-all">{{ job.url }}</div></div>
+    <div><b>Portal</b><div>{{ job.portal or '—' }}</div></div>
+    <div><b>Worker</b><div>{{ job.worker or '—' }}</div></div>
+    <div><b>Notes</b><div>{{ job.notes or '—' }}</div></div>
+    {% if job.needs %}<div><b>Needs</b><div>{{ job.needs }}</div></div>{% endif %}
+    <div><b>Updated</b><div>{{ job.updated }}</div></div>
+    {% if stats %}
+    {% set toks = (stats.input or 0) + (stats.output or 0) + (stats.cache_read or 0) + (stats.cache_write or 0) %}
+    <div><b>Last agent</b><div>#{{ stats.agent or '?' }} in window {{ stats.window }} · {{ (stats.seconds or 0) // 60 }}m {{ (stats.seconds or 0) % 60 }}s · {{ stats.turns or '—' }} steps</div></div>
+    <div><b>Tokens</b><div>{{ '{:,}'.format(toks) }} ({{ '{:,}'.format(stats.input or 0) }} in · {{ '{:,}'.format(stats.output or 0) }} out · {{ '{:,}'.format(stats.cache_read or 0) }} cache){% if stats.cost %} · ${{ '%.2f'|format(stats.cost) }}{% endif %}</div></div>
+    {% endif %}
+    <form method="post" action="/inbox/{{ job.id }}/retry"><button class="btn sm">↻ Queue again</button></form>
+  </div>
+  <div class="card"><h2>Agent log</h2>
+    <div class="log" style="max-height:640px">{% for e in events %}<div class="{{ e.kind }}">{{ e.ts[11:19] }}  {{ e.text }}</div>{% else %}No agent activity recorded.{% endfor %}</div>
+  </div>
+</div>
+{% else %}<div class="card empty">Job not found.</div>{% endif %}
+{% endblock %}

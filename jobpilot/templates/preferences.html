@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="head">
+  <div><h1>Job preferences</h1><p class="muted">What to look for, and what to skip.</p></div>
+  <form method="post" action="/preferences/easy-apply" x-data x-ref="f">
+    <label class="toggle compact" title="LinkedIn's terms forbid automating Easy Apply. Those jobs are listed in the tracker for you.">
+      <input type="checkbox" name="on" value="1" {{ 'checked' if settings.skip_easy_apply }} @change="$refs.f.submit()"><span class="sw"></span>
+      <span><b>Never automate LinkedIn Easy Apply</b></span></label>
+  </form>
+</div>
+
+{% macro tagbox(name, items, placeholder) %}
+<div x-data='tags({{ items|tojson }})' class="tagbox" @click="$refs.inp.focus()">
+  <input type="hidden" name="{{ name }}" :value="value">
+  <template x-for="(t, i) in items" :key="t + i">
+    <span class="tag"><span x-text="t"></span><button type="button" @click.stop="remove(i)" aria-label="Remove">×</button></span>
+  </template>
+  <input x-ref="inp" type="text" x-model="draft" @keydown.enter.prevent="add()" @keydown.comma.prevent="add()"
+         @keydown.backspace="back()" @blur="add()" placeholder="{{ placeholder }}">
+</div>
+{% endmacro %}
+
+<form method="post" action="/preferences" class="stack">
+  <div class="grid g2">
+    <div class="card">
+      <h2>🔍 Keywords</h2>
+      <p class="small muted">Used to filter your LinkedIn job alerts and for keyword searches. Press Enter after each one.</p>
+      {{ tagbox('keywords', settings.keywords, 'e.g. senior backend engineer') }}
+      <div class="grid g2" style="margin-top:16px">
+        <div class="field"><label>Search location</label>
+          <input type="text" name="search_location" value="{{ settings.search_location or '' }}" placeholder="India, Remote, Berlin…"></div>
+        <div class="field"><label>&nbsp;</label>
+          <label class="check-inline"><input type="checkbox" name="keyword_search" value="1" {{ 'checked' if settings.keyword_search }}> Also search LinkedIn for each keyword</label></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🔔 Job-alert notifications</h2>
+      <p class="small muted">Find jobs scrolls back through your LinkedIn notifications and stops at whichever limit it hits first.</p>
+      <div class="grid g2">
+        <div class="field"><label>Look at the last</label>
+          <div class="suffix"><input type="number" name="notif_max" min="1" max="200" value="{{ settings.notif_max }}"><span>notifications</span></div></div>
+        <div class="field"><label>Not older than</label>
+          <div class="suffix"><input type="number" name="notif_days" min="0.5" max="60" step="0.5" value="{{ settings.notif_days }}"><span>days</span></div></div>
+      </div>
+      <p class="small muted" style="margin:0">Notifications and jobs it has already seen are skipped automatically.</p>
+    </div>
+
+    <div class="card">
+      <h2>🚫 Never apply to</h2>
+      <p class="small muted">Matched against the company name and the job URL (e.g. “acme” also matches careers.acme.com).</p>
+      {{ tagbox('avoid', settings.avoid_companies, 'Company name, then Enter') }}
+    </div>
+
+    <div class="card">
+      <h2>🧰 Stack filter</h2>
+      <div class="field"><label>Languages you work in <span class="hint">· leave empty to turn the filter off</span></label>
+        {{ tagbox('stack_accept', settings.stack_accept, 'e.g. Python') }}</div>
+      <div class="field" style="margin:0"><label>Skip roles whose main language is</label>
+        {{ tagbox('stack_skip', settings.stack_skip, 'e.g. Java') }}</div>
+    </div>
+  </div>
+  <div class="row"><button class="btn primary">Save preferences</button></div>
+</form>
+{% endblock %}
