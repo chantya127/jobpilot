@@ -293,6 +293,11 @@ class Orchestrator:
         return None
 
     def _spawn(self, w: Worker, job, s):
+        err = browser.ensure_up(w.n)
+        if err:     # never let an agent run in the wrong browser profile; the job stays queued
+            self.message = f"Worker {w.n} browser: {err}"
+            self.pause(self.message)
+            return
         prompt = render_prompt(job, w.n, s)
         # Paths in bash form (Git Bash on Windows); UTF-8 for the jobpilot.tools calls the agent makes.
         env = child_env(JP_HOME=posix(config.HOME), JP_ENGINE=posix(config.engine_dir()), JP_PY=posix(sys.executable),
@@ -310,7 +315,6 @@ class Orchestrator:
                                                      "started": time.time()})
         db.set_status(job["id"], "running", worker=w.n, needs="")
         db.add_event(job["id"], w.n, "info", f"Agent #{w.agent or '?'} started in window {w.n}")
-        browser.ensure_up(w.n)
         log = open(config.LOGS / f"job-{job['id']}.jsonl", "a", encoding="utf-8")
         w.proc = subprocess.Popen(cmd, cwd=config.HOME, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", bufsize=1,

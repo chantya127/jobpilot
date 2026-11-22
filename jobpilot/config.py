@@ -33,7 +33,8 @@ DEFAULT_SETTINGS = {
     "auto_submit": True,          # agents submit; turn off in Settings to review each form first (review lock)
     "model": "sonnet",
     "browser_path": "",
-    "copy_profile_from": "",
+    "copy_profile_from": "",      # real browser profile copied into every worker without its own choice
+    "worker_profiles": {},        # {"1": "<real profile dir>", ...}: per-worker override of copy_profile_from
     "keywords": [],
     "avoid_companies": [],
     "stack_accept": [],          # e.g. ["Python", "Go", "TypeScript/Node.js"]; empty = no stack filter
