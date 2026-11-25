@@ -17,7 +17,7 @@ your own Claude Code login.
 | **Setup** | A checklist that verifies every requirement and shows the fix for anything missing |
 | **Knowledge base** | Standard answers (contact, pay, notice, eligibility, EEO…), work history, plus a markdown knowledge base. **Draft from my resume** fills it for you |
 | **Resumes** | Upload several PDFs and pick the active one |
-| **Job preferences** | Keywords, avoid-companies list, stack filter (e.g. only Python/Go/Node roles) |
+| **Job preferences** | Keywords, avoid-companies list, stack filter (your languages, plus a skip list of languages, tools or keywords: any job requiring one is skipped) |
 | **Find jobs** | Scrolls back through your LinkedIn job alerts (the last *N* notifications, none older than *D* days), skips anything already seen, and queues the company apply links. A live feed shows each step, with a Stop button. Optional keyword searches |
 | **Queue** | Paste links. Duplicates and already-applied jobs are dropped |
 | **Live agents** | 1–4 parallel workers side by side, each with its current step, a live log you can scroll freely, and Stop / Show browser buttons. **Talk to the orchestrator** in plain language (“skip Workday jobs today”, “retry the Stripe one”, “what is worker 2 stuck on?”) |

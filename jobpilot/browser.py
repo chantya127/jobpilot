@@ -1,5 +1,6 @@
 """Per-worker browser windows. Each worker = its own Chromium-family browser profile on its own CDP port, driven by
 agent-browser through a generated wrapper script ($JP_HOME/bin/abN)."""
+import json
 import os
 import platform
 import shutil
@@ -139,6 +140,7 @@ def launch(worker: int, url: str = "about:blank") -> None:
     exe = browser_path()
     if not exe:
         raise RuntimeError("No Chromium-based browser found. Install Chrome/Brave/Chromium or set its path in Settings.")
+    sync_profile(worker)
     profile_dir(worker).mkdir(parents=True, exist_ok=True)
     if is_up(worker):
         subprocess.Popen([*ab_cmd(worker), "tab", "new", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -153,11 +155,15 @@ def launch(worker: int, url: str = "about:blank") -> None:
         time.sleep(0.3)
 
 
-def ensure_up(worker: int) -> None:
+def ensure_up(worker: int) -> str:
     """Start the worker's browser from here (detached) before an agent uses it, so stopping the agent's process
-    tree never closes the window and the forms waiting for review in it."""
+    tree never closes the window and the forms waiting for review in it. Returns an error message, or ''."""
     if not is_up(worker) and browser_path():
-        launch(worker)
+        try:
+            launch(worker)
+        except RuntimeError as e:
+            return str(e)
+    return ""
 
 
 def show_url(worker: int, url: str) -> str:
@@ -189,6 +195,13 @@ def show_url(worker: int, url: str) -> str:
     return "opened"
 
 
+def _local_state(base: Path) -> dict:
+    try:
+        return json.loads((base / "Local State").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
 def existing_profiles() -> list[dict]:
     """Normal browser profiles on this machine that can be copied into worker profiles."""
     out = []
@@ -196,23 +209,92 @@ def existing_profiles() -> list[dict]:
         b = Path(base).expanduser()
         if not b.exists():
             continue
+        info = (_local_state(b).get("profile") or {}).get("info_cache") or {}
         for d in sorted(b.iterdir()):
             if d.is_dir() and (d.name == "Default" or d.name.startswith("Profile ")) and (d / "Preferences").exists():
-                out.append({"browser": name, "path": str(d), "label": f"{name} – {d.name}"})
+                who = " · ".join(x for x in (info.get(d.name, {}).get("name"), info.get(d.name, {}).get("user_name")) if x)
+                out.append({"browser": name, "path": str(d), "label": f"{name} – {d.name}" + (f" ({who})" if who else "")})
     return out
 
 
-def copy_profile(src: str, workers: int) -> None:
-    """Copy one real browser profile into every worker (as their 'Default'). The browser must be closed first.
-    Logins only carry over when the worker uses the same browser (it shares that browser's keychain entry)."""
+PROFILE_MARKER = ".jobpilot-source"     # in each worker dir: the real profile it was copied from
+_COPY_SKIP = shutil.ignore_patterns("Cache", "Code Cache", "GPUCache", "Service Worker", "*.lock", "Singleton*")
+
+
+def assigned_profile(worker: int, s: dict | None = None) -> str:
+    s = s or config.load_settings()
+    return (s.get("worker_profiles") or {}).get(str(worker)) or s.get("copy_profile_from") or ""
+
+
+def copied_from(worker: int) -> str:
+    f = profile_dir(worker) / PROFILE_MARKER
+    return f.read_text(encoding="utf-8").strip() if f.exists() else ""
+
+
+def close(worker: int) -> None:
+    """Close this worker's browser window (CDP Browser.close) so its profile files are released."""
+    if not is_up(worker):
+        return
+    try:
+        import urllib.request
+        from websockets.sync.client import connect
+        ws = json.load(urllib.request.urlopen(f"http://127.0.0.1:{port(worker)}/json/version", timeout=3))
+        with connect(ws["webSocketDebuggerUrl"], open_timeout=5, max_size=None) as c:
+            c.send(json.dumps({"id": 1, "method": "Browser.close"}))
+            try:
+                c.recv(timeout=5)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    for _ in range(50):
+        if not is_up(worker):
+            break
+        time.sleep(0.2)
+
+
+def copy_into(worker: int, src: str) -> None:
+    """Copy one real browser profile into this worker (as its only profile, 'Default'). Built in a temp dir and
+    swapped in, so a failed copy never leaves a half-copied or blank profile behind. Logins only carry over when
+    the worker uses the same browser (it shares that browser's keychain entry / encryption key)."""
     s = Path(src)
-    base = s.parent
-    skip = shutil.ignore_patterns("Cache", "Code Cache", "GPUCache", "Service Worker", "*.lock", "Singleton*")
-    for w in range(1, workers + 1):
-        dst = profile_dir(w)
-        if dst.exists():
-            shutil.rmtree(dst)
-        dst.mkdir(parents=True)
-        if (base / "Local State").exists():
-            shutil.copy2(base / "Local State", dst / "Local State")
-        shutil.copytree(s, dst / "Default", ignore=skip, symlinks=True)
+    if not (s / "Preferences").exists():
+        raise RuntimeError(f"Browser profile not found: {src}")
+    close(worker)
+    dst = profile_dir(worker)
+    tmp, old = dst.with_name(dst.name + ".new"), dst.with_name(dst.name + ".old")
+    shutil.rmtree(tmp, ignore_errors=True)
+    try:
+        shutil.copytree(s, tmp / "Default", ignore=_COPY_SKIP, symlinks=True)
+    except (OSError, shutil.Error) as e:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise RuntimeError(f"Couldn't copy {s.name} (close that browser completely first): {e}") from e
+    # Keep the encryption key etc., but list only the copied profile, so the worker never shows or opens another one.
+    ls = _local_state(s.parent)
+    prof = ls.setdefault("profile", {})
+    entry = (prof.get("info_cache") or {}).get(s.name)
+    prof.update(info_cache={"Default": entry} if entry else {}, last_used="Default",
+                last_active_profiles=["Default"], profiles_order=["Default"])
+    (tmp / "Local State").write_text(json.dumps(ls), encoding="utf-8")
+    (tmp / PROFILE_MARKER).write_text(str(s), encoding="utf-8")
+    shutil.rmtree(old, ignore_errors=True)
+    if dst.exists():
+        for i in range(20):        # the closed browser can take a moment to release its files
+            try:
+                dst.rename(old)
+                break
+            except OSError:
+                if i == 19:
+                    shutil.rmtree(tmp, ignore_errors=True)
+                    raise RuntimeError(f"Worker {worker}'s browser is still open; close it and try again")
+                time.sleep(0.5)
+    tmp.rename(dst)
+    shutil.rmtree(old, ignore_errors=True)
+
+
+def sync_profile(worker: int) -> None:
+    """Make sure the worker holds the real profile assigned to it: copies on first use, for workers added later,
+    and after the assignment changes. Only while the worker's browser is closed."""
+    src = assigned_profile(worker)
+    if src and not is_up(worker) and copied_from(worker) != src:
+        copy_into(worker, src)

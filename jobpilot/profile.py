@@ -114,14 +114,6 @@ def save(p: dict) -> None:
     render(p)
 
 
-def append_learned(question: str, answer: str) -> None:
-    md = load_md()
-    q, a = question.replace("|", "/").strip(), answer.replace("|", "/").strip()
-    if "## Answers learned" not in md:
-        md += "\n## Answers learned during applications\n| Question | Answer |\n|---|---|\n"
-    save_md(md.rstrip("\n") + f"\n| {q} | {a} |\n")
-
-
 def full_name(p: dict) -> str:
     return " ".join(x for x in (p.get("first_name"), p.get("last_name")) if x)
 

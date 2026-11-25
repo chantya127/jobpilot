@@ -16,7 +16,7 @@ Email codes: {{OTP_LINE}}
    and uses `$AB` for the browser. Open the job in a NEW tab and let anti-bot checks settle: `$AB tab new "{{URL}}" && sleep 3`.
    Other tabs may hold forms waiting for the user; never touch them.
 3. If `jdone "{{URL}}"` exits 0, it's already done: report `skipped | ? | ? | already applied`.
-4. **Stack fit (before filling anything).** {{STACK_CHECK}}
+4. **Skip check (before filling anything).** {{STACK_CHECK}}
 
 ## Work fast (each step costs time)
 - Every Bash call must finish in under 90 seconds (longer calls get moved to the background and stall you). Never
@@ -53,4 +53,8 @@ In all these cases leave the form filled in its tab and don't close it.
 3. On `applied`, close your tab (`$AB tab close`). Otherwise leave it open and include the tab id in NEEDS.
 4. Your final message is ONLY one line, in this exact format (the dashboard parses it):
    `<status> | <Company> | <Role> | <reason or note> [| NEEDS: <exact question or action for the user, with tab id>] [| LEARNED: <new portal quirk not already in the notes>]`
-   For an unanswered profile question use `NEEDS: QUESTION: <the exact question>` so the dashboard can ask the user.
+   For an unanswered profile question use `NEEDS: QUESTION: <the question(s)>` so the dashboard can ask the user. Its
+   answer is saved for every future application, so write only the question(s) about the applicant, worded generically:
+   no company name, worker/tab ids or instructions (the job is re-queued after the answer). Include the options for
+   multiple choice and number multi-part questions, e.g. `NEEDS: QUESTION: (1) Able to work from the office 3 days a
+   week? Options: Yes / Need flexibility / Remote only (2) Current annual fixed salary in INR?`

@@ -37,11 +37,15 @@
       {% endfor %}
     </div>
     {% if real_profiles %}
-    <details style="margin-top:16px"><summary class="small">Advanced: copy my existing browser profile into the workers</summary>
-      <form method="post" action="/settings/copy-profile" class="stack" style="margin-top:10px" onsubmit="return confirm('This replaces the worker profiles. Close that browser first. Continue?')">
-        <select name="src">{% for p in real_profiles %}<option value="{{ p.path }}">{{ p.label }}</option>{% endfor %}</select>
-        <p class="small muted">Saved logins only carry over if the workers use that same browser. The agents will then act inside your real accounts.</p>
-        <button class="btn">Copy profile</button>
+    <details style="margin-top:16px" {{ 'open' if worker_profiles[1] }}><summary class="small">Advanced: use my existing browser profiles in the workers</summary>
+      <form method="post" action="/settings/copy-profile" class="stack" style="margin-top:10px" onsubmit="return confirm('This replaces the chosen worker profiles and closes those worker windows. Close that browser first. Continue?')">
+        {% for n in range(1, settings.workers + 1) %}
+        <div class="field"><label>Worker {{ n }}</label>
+          <select name="src{{ n }}"><option value="">Its own JobPilot profile</option>
+            {% for p in real_profiles %}<option value="{{ p.path }}" {{ 'selected' if p.path == worker_profiles[n] }}>{{ p.label }}</option>{% endfor %}</select></div>
+        {% endfor %}
+        <p class="small muted">Each worker gets a copy of the profile chosen for it, re-copied automatically whenever you change the choice. Saved logins only carry over if the workers use that same browser. The agents will then act inside your real accounts.</p>
+        <button class="btn">Save worker profiles</button>
       </form></details>
     {% endif %}
   </div>

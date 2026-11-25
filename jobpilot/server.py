@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import __version__, browser, chat, config, db, otp, profile, ui
+from . import __version__, browser, chat, config, db, learned, otp, profile, ui
 from .orchestrator import ORCH
 from .procs import IS_WIN, OS_NAME, child_env, git_bash, group_kwargs, which
 
@@ -182,6 +182,13 @@ async def profile_save(request: Request):
 def profile_md_save(md: str = Form("")):
     profile.save_md(md)
     return back("/profile#kb", "Knowledge base saved")
+
+
+@app.post("/profile/tidy-learned")
+def profile_tidy_learned():
+    n = learned.tidy()
+    return back("/profile#kb", f"Answers learned rewritten as {n} reusable rows. Check them below"
+                if n else "No learned answers to tidy yet")
 
 
 @app.post("/profile/from-resume")
@@ -468,9 +475,9 @@ def inbox(request: Request):
 
 @app.post("/inbox/{job_id}/answer")
 def inbox_answer(job_id: int, question: str = Form(...), answer: str = Form(...)):
-    profile.append_learned(question, answer)
+    rows = learned.learn(question, answer)
     db.set_status(job_id, "queued", needs="", notes="Answered: re-queued")
-    return back("/inbox", "Saved to your knowledge base and re-queued")
+    return back("/inbox", f"Saved as {len(rows)} answer{'s' if len(rows) != 1 else ''} in your knowledge base and re-queued")
 
 
 @app.post("/inbox/{job_id}/{action}")
@@ -565,7 +572,8 @@ def settings_page(request: Request):
     # Local-only page (127.0.0.1): stored values are filled in masked, with a show/hide toggle.
     return page(request, "settings.html", "settings", have=have, sec=sec, gmail_user=sec.get("gmail_user", ""),
                 browsers=browser.detect(), current_browser=browser.browser_path(),
-                real_profiles=browser.existing_profiles())
+                real_profiles=browser.existing_profiles(),
+                worker_profiles={w: browser.assigned_profile(w) for w in range(1, 5)})
 
 
 @app.post("/settings")
@@ -604,15 +612,25 @@ def settings_otp_test():
 
 
 @app.post("/settings/copy-profile")
-def settings_copy_profile(src: str = Form(...)):
-    try:
-        browser.copy_profile(src, int(config.load_settings().get("workers", 2)))
-    except Exception as e:
-        return back("/settings#browser", f"Copy failed (close that browser first): {str(e)[:120]}")
+async def settings_copy_profile(request: Request):
+    form = await request.form()
     s = config.load_settings()
-    s["copy_profile_from"] = src
+    n = int(s.get("workers", 2))
+    choice = {str(w): str(form.get(f"src{w}") or "") for w in range(1, n + 1)}
+    s["worker_profiles"] = {k: v for k, v in choice.items() if v}
+    s["copy_profile_from"] = ""     # the per-worker choice is now explicit ("" = the worker's own profile)
     config.save_settings(s)
-    return back("/settings#browser", "Profile copied into every worker")
+    errors = []
+    for w in range(1, n + 1):
+        src = choice[str(w)]
+        if src and browser.copied_from(w) != src:
+            try:
+                browser.copy_into(w, src)
+            except Exception as e:
+                errors.append(f"worker {w}: {str(e)[:120]}")
+    if errors:
+        return back("/settings#browser", "Copy failed (close that browser first): " + "; ".join(errors))
+    return back("/settings#browser", "Worker profiles updated")
 
 
 @app.get("/healthz", response_class=PlainTextResponse)

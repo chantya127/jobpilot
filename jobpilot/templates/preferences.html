@@ -54,10 +54,10 @@
 
     <div class="card">
       <h2>Stack filter</h2>
-      <div class="field"><label>Languages you work in <span class="hint">· leave empty to turn the filter off</span></label>
+      <div class="field"><label>Languages you work in <span class="hint">· optional</span></label>
         {{ tagbox('stack_accept', settings.stack_accept, 'e.g. Python') }}</div>
-      <div class="field" style="margin:0"><label>Skip roles whose main language is</label>
-        {{ tagbox('stack_skip', settings.stack_skip, 'e.g. Java') }}</div>
+      <div class="field" style="margin:0"><label>Skip roles that require <span class="hint">· languages, frameworks, tools or any keyword; matched in the title and required skills, not nice-to-haves</span></label>
+        {{ tagbox('stack_skip', settings.stack_skip, 'e.g. Java, Salesforce, SAP') }}</div>
     </div>
   </div>
   <div class="row"><button class="btn primary">Save preferences</button></div>
